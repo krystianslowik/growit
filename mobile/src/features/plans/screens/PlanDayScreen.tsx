@@ -5,7 +5,7 @@ import { PlansStackParamList } from '../../../navigation/types';
 import { useGetApiTrainingPlansDaysDayId } from '../../../api/generated/training-plans/training-plans';
 import { PlanDayExerciseRow } from '../components/PlanDayExerciseRow';
 import { usePlanDayAutoSave } from '../hooks/usePlanDayAutoSave';
-import { usePlanDayExerciseDelete } from '../hooks/usePlanDayExerciseDelete';
+import { useDeleteApiTrainingPlansExercisesPlanDayExerciseId } from '../../../api/generated/training-plans/training-plans';
 import { isPendingExerciseId } from '../constants';
 import { Input } from '../../../theme/components/Input';
 import { tokens } from '../../../theme/tokens';
@@ -16,7 +16,7 @@ export const PlanDayScreen = ({ route, navigation }: Props) => {
   const { dayId } = route.params;
 
   const { data: day, isLoading } = useGetApiTrainingPlansDaysDayId(dayId);
-  const { mutate: removeExercise } = usePlanDayExerciseDelete(dayId, day?.planId);
+  const { mutate: removeExercise } = useDeleteApiTrainingPlansExercisesPlanDayExerciseId();
 
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
@@ -65,7 +65,6 @@ export const PlanDayScreen = ({ route, navigation }: Props) => {
               <PlanDayExerciseRow
                 key={exercise.id}
                 exercise={exercise}
-                dayId={dayId}
                 pending={isPendingExerciseId(exercise.id)}
                 onDelete={() => removeExercise({ planDayExerciseId: exercise.id })}
               />

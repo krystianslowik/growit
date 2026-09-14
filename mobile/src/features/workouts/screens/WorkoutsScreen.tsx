@@ -1,18 +1,15 @@
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQueryClient } from '@tanstack/react-query';
 import { TodayStackParamList } from '../../../navigation/types';
 import {
   useGetApiWorkoutsUserIdByDate,
   useGetApiWorkoutsUserIdHistory,
   usePostApiWorkouts,
   usePostApiWorkoutsFromPlanDay,
-  getGetApiWorkoutsUserIdByDateQueryKey,
 } from '../../../api/generated/workouts/workouts';
 import {
   useGetApiTrainingPlansNextDay,
-  getGetApiTrainingPlansNextDayQueryKey,
 } from '../../../api/generated/training-plans/training-plans';
 import { WorkoutSummaryResponse } from '../../../api/generated/schemas';
 import { Button } from '../../../theme/components/Button';
@@ -44,7 +41,6 @@ export const WorkoutsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<TodayStackParamList>>();
   const userId = useUserId();
   const { name } = useAuth();
-  const queryClient = useQueryClient();
   const today = getToday();
 
   const { data: workout, isLoading } = useGetApiWorkoutsUserIdByDate(
@@ -58,25 +54,11 @@ export const WorkoutsScreen = () => {
   // an empty string - falsy either way, so the check below covers both.
   const { data: nextDay } = useGetApiTrainingPlansNextDay();
 
-  const invalidateToday = () => {
-    queryClient.invalidateQueries({
-      queryKey: getGetApiWorkoutsUserIdByDateQueryKey(userId, { date: today }),
-    });
-    queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansNextDayQueryKey() });
-  };
+  const { mutate: createWorkout, isPending: isCreatingEmpty } = usePostApiWorkouts();
 
-  const { mutate: createWorkout, isPending: isCreatingEmpty } = usePostApiWorkouts({
-    mutation: { onSuccess: invalidateToday },
-  });
-
-  const { mutate: startFromDay, isPending: isStartingDay } = usePostApiWorkoutsFromPlanDay({
-    mutation: {
-      onSuccess: ({ id }) => {
-        invalidateToday();
-        navigation.navigate('WorkoutDetail', { workoutId: id });
-      },
-    },
-  });
+  // Navigation stays on the server's answer for now: nothing seeds a workout into the
+  // cache yet, so opening it early would land on a screen with nothing to read.
+  const { mutate: startFromDay, isPending: isStartingDay } = usePostApiWorkoutsFromPlanDay();
 
   if (isLoading) {
     return (
@@ -152,14 +134,19 @@ export const WorkoutsScreen = () => {
                 loading={isStartingDay}
                 disabled={isStartingDay}
                 onPress={() =>
-                  startFromDay({
-                    data: {
-                      id: newId(),
-                      planDayId: nextDay.id,
-                      performedAt: today,
-                      exerciseIds: null,
+                  startFromDay(
+                    {
+                      data: {
+                        id: newId(),
+                        planDayId: nextDay.id,
+                        performedAt: today,
+                        exerciseIds: null,
+                      },
                     },
-                  })
+                    {
+                      onSuccess: ({ id }) => navigation.navigate('WorkoutDetail', { workoutId: id }),
+                    },
+                  )
                 }
               />
               <Button

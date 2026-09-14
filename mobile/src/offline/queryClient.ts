@@ -1,5 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 import { isPermanentError } from '../api/errors';
+import { registerMutationDefaults } from './mutationDefaults';
 
 /// Every write in the app shares one scope, which is what makes the mutation cache run
 /// them strictly in order: canRun() only lets the first pending mutation of a scope
@@ -17,8 +18,8 @@ const WRITE_SCOPE = { id: 'growit-writes' };
 /// is only ever spent on real trouble. Roughly two minutes with the default backoff.
 const MAX_WRITE_ATTEMPTS = 8;
 
-export const createQueryClient = () =>
-  new QueryClient({
+export const createQueryClient = () => {
+  const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
         // 'online', not 'offlineFirst': React Native has no HTTP cache underneath, so
@@ -40,3 +41,11 @@ export const createQueryClient = () =>
       },
     },
   });
+
+  // Registered here rather than by the caller because the two cannot be separated: once
+  // the queue is persisted, hydration rebuilds mutations through defaultMutationOptions,
+  // and a key with no registered mutationFn comes back unable to run.
+  registerMutationDefaults(queryClient);
+
+  return queryClient;
+};

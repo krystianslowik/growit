@@ -1,28 +1,22 @@
 import { View, Text, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useQueryClient } from '@tanstack/react-query';
 import { TodayStackParamList } from '../../../navigation/types';
 import {
   useGetApiTrainingPlans,
   useGetApiTrainingPlansPlanId,
-  getGetApiTrainingPlansNextDayQueryKey,
 } from '../../../api/generated/training-plans/training-plans';
 import {
   usePostApiWorkoutsFromPlanDay,
-  getGetApiWorkoutsUserIdByDateQueryKey,
 } from '../../../api/generated/workouts/workouts';
 import { Button } from '../../../theme/components/Button';
 import { tokens } from '../../../theme/tokens';
 import { newId } from '../../../offline/ids';
 import { getToday } from '../../../lib/date';
 import { exerciseCountLabel } from '../../../lib/plurals';
-import { useUserId } from '../../../auth/AuthContext';
 
 type Props = NativeStackScreenProps<TodayStackParamList, 'StartFromPlanDay'>;
 
 export const StartFromPlanDayScreen = ({ navigation }: Props) => {
-  const userId = useUserId();
-  const queryClient = useQueryClient();
   const today = getToday();
 
   const { data: plans, isLoading: isLoadingPlans } = useGetApiTrainingPlans();
@@ -32,17 +26,7 @@ export const StartFromPlanDayScreen = ({ navigation }: Props) => {
     query: { enabled: !!activePlan },
   });
 
-  const { mutate: start, isPending } = usePostApiWorkoutsFromPlanDay({
-    mutation: {
-      onSuccess: ({ id }) => {
-        queryClient.invalidateQueries({
-          queryKey: getGetApiWorkoutsUserIdByDateQueryKey(userId, { date: today }),
-        });
-        queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansNextDayQueryKey() });
-        navigation.replace('WorkoutDetail', { workoutId: id });
-      },
-    },
-  });
+  const { mutate: start, isPending } = usePostApiWorkoutsFromPlanDay();
 
   if (isLoadingPlans || isLoadingPlan) {
     return (
@@ -67,9 +51,12 @@ export const StartFromPlanDayScreen = ({ navigation }: Props) => {
         renderItem={({ item, index }) => (
           <Pressable
             onPress={() =>
-              start({
-                data: { id: newId(), planDayId: item.id, performedAt: today, exerciseIds: null },
-              })
+              start(
+                {
+                  data: { id: newId(), planDayId: item.id, performedAt: today, exerciseIds: null },
+                },
+                { onSuccess: ({ id }) => navigation.replace('WorkoutDetail', { workoutId: id }) },
+              )
             }
             disabled={isPending}
             className="bg-surface rounded-md p-4 border border-line flex-row items-center gap-3"

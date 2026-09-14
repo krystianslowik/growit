@@ -1,9 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import {
-  usePutApiTrainingPlansPlanId,
-  getGetApiTrainingPlansPlanIdQueryKey,
-} from '../../../api/generated/training-plans/training-plans';
+import { usePutApiTrainingPlansPlanId } from '../../../api/generated/training-plans/training-plans';
 import { TrainingPlanResponse } from '../../../api/generated/schemas';
 
 type Args = {
@@ -15,31 +11,13 @@ type Args = {
 };
 
 /// Saves the plan header a moment after typing stops, so the screen has no save button.
+///
+/// The optimistic patch and the invalidation live in the mutation registry now - passing
+/// them here would override what is registered rather than add to it.
 export const usePlanAutoSave = ({ planId, plan, name, notes, delayMs = 600 }: Args) => {
-  const queryClient = useQueryClient();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const queryKey = planId ? getGetApiTrainingPlansPlanIdQueryKey(planId) : null;
-
-  const { mutate: update } = usePutApiTrainingPlansPlanId({
-    mutation: {
-      onMutate: async ({ data }) => {
-        if (!queryKey) return;
-        await queryClient.cancelQueries({ queryKey });
-        const previous = queryClient.getQueryData<TrainingPlanResponse>(queryKey);
-        queryClient.setQueryData<TrainingPlanResponse>(queryKey, (old) =>
-          old ? { ...old, name: data.name, notes: data.notes ?? null } : old,
-        );
-        return { previous };
-      },
-      onError: (_err, _vars, context) => {
-        if (queryKey && context?.previous) queryClient.setQueryData(queryKey, context.previous);
-      },
-      onSettled: () => {
-        if (queryKey) queryClient.invalidateQueries({ queryKey });
-      },
-    },
-  });
+  const { mutate: update } = usePutApiTrainingPlansPlanId();
 
   useEffect(() => {
     if (!planId || !plan) return;

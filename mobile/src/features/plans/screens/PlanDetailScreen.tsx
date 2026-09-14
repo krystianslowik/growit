@@ -1,16 +1,12 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useQueryClient } from '@tanstack/react-query';
 import { PlansStackParamList } from '../../../navigation/types';
 import {
   useGetApiTrainingPlansPlanId,
   usePostApiTrainingPlans,
   usePostApiTrainingPlansPlanIdDays,
   usePutApiTrainingPlansPlanIdActive,
-  getGetApiTrainingPlansQueryKey,
-  getGetApiTrainingPlansPlanIdQueryKey,
-  getGetApiTrainingPlansNextDayQueryKey,
 } from '../../../api/generated/training-plans/training-plans';
 import { usePlanAutoSave } from '../hooks/usePlanAutoSave';
 import { Button } from '../../../theme/components/Button';
@@ -23,7 +19,6 @@ type Props = NativeStackScreenProps<PlansStackParamList, 'PlanDetail'>;
 
 export const PlanDetailScreen = ({ route, navigation }: Props) => {
   const { planId } = route.params;
-  const queryClient = useQueryClient();
 
   const isNew = planId === null;
 
@@ -43,50 +38,32 @@ export const PlanDetailScreen = ({ route, navigation }: Props) => {
 
   usePlanAutoSave({ planId, plan, name, notes });
 
-  const { mutate: create, isPending: isCreating } = usePostApiTrainingPlans({
-    mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansQueryKey() }),
-    },
-  });
+  const { mutate: create, isPending: isCreating } = usePostApiTrainingPlans();
 
   const { mutate: addDay, isPending: isAddingDay } = usePostApiTrainingPlansPlanIdDays({
-    mutation: {
-      onSuccess: () => {
-        if (planId) {
-          queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansPlanIdQueryKey(planId) });
-        }
-        queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansQueryKey() });
-      },
-    },
   });
 
-  const { mutate: setActive, isPending: isActivating } = usePutApiTrainingPlansPlanIdActive({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansNextDayQueryKey() });
-        if (planId) {
-          queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansPlanIdQueryKey(planId) });
-        }
-      },
-    },
-  });
+  const { mutate: setActive, isPending: isActivating } = usePutApiTrainingPlansPlanIdActive();
 
   const handleCreate = () => {
     if (!name.trim()) return;
-    create(
-      { data: { id: newId(), name: name.trim(), notes: notes.trim() || null } },
-      { onSuccess: ({ id }) => navigation.setParams({ planId: id }) },
-    );
+
+    // The screen flips from "new" to "editing" on our own id rather than on the server's
+    // answer, so it does not sit waiting for a round trip that may be hours away.
+    const id = newId();
+    create({ data: { id, name: name.trim(), notes: notes.trim() || null } });
+    navigation.setParams({ planId: id });
   };
 
   const handleAddDay = () => {
     if (!planId) return;
+
+    // Safe to open straight away: the registry seeds the day into the cache in onMutate,
+    // so the screen finds it there instead of racing the write to a 404.
+    const id = newId();
     const dayNumber = (plan?.days.length ?? 0) + 1;
-    addDay(
-      { planId, data: { id: newId(), name: `Dzień ${dayNumber}`, notes: null } },
-      { onSuccess: ({ id }) => navigation.navigate('PlanDay', { dayId: id }) },
-    );
+    addDay({ planId, data: { id, name: `Dzień ${dayNumber}`, notes: null } });
+    navigation.navigate('PlanDay', { dayId: id });
   };
 
   if (!isNew && isLoading) {

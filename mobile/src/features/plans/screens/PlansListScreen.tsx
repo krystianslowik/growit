@@ -4,13 +4,10 @@ import { RectButton } from 'react-native-gesture-handler';
 import Swipeable, { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useQueryClient } from '@tanstack/react-query';
 import { PlansStackParamList } from '../../../navigation/types';
 import {
   useGetApiTrainingPlans,
   useDeleteApiTrainingPlansPlanId,
-  getGetApiTrainingPlansQueryKey,
-  getGetApiTrainingPlansNextDayQueryKey,
 } from '../../../api/generated/training-plans/training-plans';
 import { TrainingPlanSummaryResponse } from '../../../api/generated/schemas';
 import { Button } from '../../../theme/components/Button';
@@ -80,30 +77,9 @@ const PlanRow = ({ plan, onPress, onDelete }: RowProps) => {
 };
 
 export const PlansListScreen = ({ navigation }: Props) => {
-  const queryClient = useQueryClient();
   const { data: plans, isLoading } = useGetApiTrainingPlans();
-  const listKey = getGetApiTrainingPlansQueryKey();
 
-  const { mutate: remove } = useDeleteApiTrainingPlansPlanId({
-    mutation: {
-      onMutate: async ({ planId }) => {
-        await queryClient.cancelQueries({ queryKey: listKey });
-        const previous = queryClient.getQueryData<TrainingPlanSummaryResponse[]>(listKey);
-        queryClient.setQueryData<TrainingPlanSummaryResponse[]>(listKey, (old) =>
-          old?.filter((p) => p.id !== planId),
-        );
-        return { previous };
-      },
-      onError: (_err, _vars, context) => {
-        if (context?.previous) queryClient.setQueryData(listKey, context.previous);
-      },
-      onSettled: () => {
-        queryClient.invalidateQueries({ queryKey: listKey });
-        // Deleting a plan can change which day the today screen suggests.
-        queryClient.invalidateQueries({ queryKey: getGetApiTrainingPlansNextDayQueryKey() });
-      },
-    },
-  });
+  const { mutate: remove } = useDeleteApiTrainingPlansPlanId();
 
   if (isLoading) {
     return (

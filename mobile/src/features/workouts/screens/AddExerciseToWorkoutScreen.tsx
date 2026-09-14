@@ -29,16 +29,7 @@ export const AddExerciseToWorkoutScreen = ({ route, navigation }: Props) => {
     );
     return workout?.exercises.length ?? 0;
   };
-  const { mutate: addExercise, isPending } = usePostApiWorkoutsWorkoutIdExercises({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({
-          queryKey: getGetApiWorkoutsWorkoutIdQueryKey(workoutId),
-        });
-        navigation.goBack();
-      },
-    },
-  });
+  const { mutate: addExercise, isPending } = usePostApiWorkoutsWorkoutIdExercises();
 
   if (isLoading) {
     return (
@@ -57,17 +48,22 @@ export const AddExerciseToWorkoutScreen = ({ route, navigation }: Props) => {
         <Pressable
           className="bg-surface rounded-md p-4 border border-line"
           onPress={() =>
-            addExercise({
-              workoutId,
-              data: {
-                id: newId(),
-                exerciseId: item.id,
-                orderIndex: nextOrderIndex(),
-                targetSets: null,
-                targetReps: null,
-                restSeconds: null,
+            addExercise(
+              {
+                workoutId,
+                data: {
+                  id: newId(),
+                  exerciseId: item.id,
+                  orderIndex: nextOrderIndex(),
+                  targetSets: null,
+                  targetReps: null,
+                  restSeconds: null,
+                },
               },
-            })
+              // Closing early would drop the user back on a list that does not show what
+              // they just added - no workout optimism yet. Revisit with phase 6.
+              { onSuccess: () => navigation.goBack() },
+            )
           }
           disabled={isPending}
         >

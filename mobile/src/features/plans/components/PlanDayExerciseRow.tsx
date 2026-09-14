@@ -4,13 +4,12 @@ import { RectButton } from 'react-native-gesture-handler';
 import Swipeable, { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Ionicons } from '@expo/vector-icons';
 import { PlanDayExerciseResponse } from '../../../api/generated/schemas';
-import { usePlanDayExerciseUpdate } from '../hooks/usePlanDayExerciseUpdate';
+import { usePutApiTrainingPlansExercisesPlanDayExerciseId } from '../../../api/generated/training-plans/training-plans';
 import { Input } from '../../../theme/components/Input';
 import { tokens } from '../../../theme/tokens';
 
 type Props = {
   exercise: PlanDayExerciseResponse;
-  dayId: string;
   onDelete: () => void;
   /// The row only exists in the optimistic cache so far - the server has not handed back
   /// a real id yet, so editing or deleting it would address a row that does not exist.
@@ -19,10 +18,10 @@ type Props = {
 
 const SAVE_DELAY_MS = 600;
 
-export const PlanDayExerciseRow = ({ exercise, dayId, onDelete, pending = false }: Props) => {
+export const PlanDayExerciseRow = ({ exercise, onDelete, pending = false }: Props) => {
   const swipeRef = useRef<SwipeableMethods>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { mutate: update } = usePlanDayExerciseUpdate(dayId);
+  const { mutate: update } = usePutApiTrainingPlansExercisesPlanDayExerciseId();
 
   const [isEditing, setIsEditing] = useState(false);
   const [targets, setTargets] = useState({
