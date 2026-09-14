@@ -6,5 +6,13 @@
  */
 
 export interface AddExerciseToWorkoutRequest {
+  id: string;
   exerciseId: string;
+  orderIndex: number;
+  /** @nullable */
+  targetSets: number | null;
+  /** @nullable */
+  targetReps: number | null;
+  /** @nullable */
+  restSeconds: number | null;
 }

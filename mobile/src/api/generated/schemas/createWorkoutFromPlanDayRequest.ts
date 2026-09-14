@@ -4,8 +4,12 @@
  * GrowIt.API | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { WorkoutExerciseIdAssignment } from './workoutExerciseIdAssignment';
 
 export interface CreateWorkoutFromPlanDayRequest {
+  id: string;
   planDayId: string;
   performedAt: string;
+  /** @nullable */
+  exerciseIds: WorkoutExerciseIdAssignment[] | null;
 }

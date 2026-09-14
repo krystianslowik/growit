@@ -6,6 +6,8 @@
  */
 
 export interface LogSetRequest {
+  id: string;
   weightKg: number;
   reps: number;
+  orderIndex: number;
 }

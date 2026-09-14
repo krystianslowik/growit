@@ -6,6 +6,7 @@
  */
 
 export interface AddExerciseToPlanDayRequest {
+  id: string;
   /** @nullable */
   exerciseId: string | null;
   /** @nullable */

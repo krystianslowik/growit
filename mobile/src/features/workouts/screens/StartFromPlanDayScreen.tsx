@@ -13,6 +13,7 @@ import {
 } from '../../../api/generated/workouts/workouts';
 import { Button } from '../../../theme/components/Button';
 import { tokens } from '../../../theme/tokens';
+import { newId } from '../../../offline/ids';
 import { getToday } from '../../../lib/date';
 import { exerciseCountLabel } from '../../../lib/plurals';
 import { useUserId } from '../../../auth/AuthContext';
@@ -65,7 +66,11 @@ export const StartFromPlanDayScreen = ({ navigation }: Props) => {
         }
         renderItem={({ item, index }) => (
           <Pressable
-            onPress={() => start({ data: { planDayId: item.id, performedAt: today } })}
+            onPress={() =>
+              start({
+                data: { id: newId(), planDayId: item.id, performedAt: today, exerciseIds: null },
+              })
+            }
             disabled={isPending}
             className="bg-surface rounded-md p-4 border border-line flex-row items-center gap-3"
           >

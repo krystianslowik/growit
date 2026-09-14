@@ -16,6 +16,7 @@ import { usePlanAutoSave } from '../hooks/usePlanAutoSave';
 import { Button } from '../../../theme/components/Button';
 import { Input } from '../../../theme/components/Input';
 import { tokens } from '../../../theme/tokens';
+import { newId } from '../../../offline/ids';
 import { exerciseCountLabel } from '../../../lib/plurals';
 
 type Props = NativeStackScreenProps<PlansStackParamList, 'PlanDetail'>;
@@ -74,7 +75,7 @@ export const PlanDetailScreen = ({ route, navigation }: Props) => {
   const handleCreate = () => {
     if (!name.trim()) return;
     create(
-      { data: { name: name.trim(), notes: notes.trim() || null } },
+      { data: { id: newId(), name: name.trim(), notes: notes.trim() || null } },
       { onSuccess: ({ id }) => navigation.setParams({ planId: id }) },
     );
   };
@@ -83,7 +84,7 @@ export const PlanDetailScreen = ({ route, navigation }: Props) => {
     if (!planId) return;
     const dayNumber = (plan?.days.length ?? 0) + 1;
     addDay(
-      { planId, data: { name: `Dzień ${dayNumber}`, notes: null } },
+      { planId, data: { id: newId(), name: `Dzień ${dayNumber}`, notes: null } },
       { onSuccess: ({ id }) => navigation.navigate('PlanDay', { dayId: id }) },
     );
   };

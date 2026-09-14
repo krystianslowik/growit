@@ -6,7 +6,7 @@
  */
 
 export interface CreateWorkoutRequest {
-  userId: string;
+  id: string;
   name: string;
   performedAt: string;
   /** @nullable */

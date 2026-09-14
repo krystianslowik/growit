@@ -6,6 +6,7 @@
  */
 
 export interface CreatePlanDayRequest {
+  id: string;
   name: string;
   /** @nullable */
   notes: string | null;

@@ -6,6 +6,7 @@
  */
 
 export interface CreateTrainingPlanRequest {
+  id: string;
   name: string;
   /** @nullable */
   notes: string | null;

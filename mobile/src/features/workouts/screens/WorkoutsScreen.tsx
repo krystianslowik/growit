@@ -17,6 +17,7 @@ import {
 import { WorkoutSummaryResponse } from '../../../api/generated/schemas';
 import { Button } from '../../../theme/components/Button';
 import { tokens } from '../../../theme/tokens';
+import { newId } from '../../../offline/ids';
 import { getToday, formatWeekdayDayMonth, formatDayMonth, formatShortDate } from '../../../lib/date';
 import { exerciseCountLabel } from '../../../lib/plurals';
 import { useAuth, useUserId } from '../../../auth/AuthContext';
@@ -150,7 +151,16 @@ export const WorkoutsScreen = () => {
                 variant="primary"
                 loading={isStartingDay}
                 disabled={isStartingDay}
-                onPress={() => startFromDay({ data: { planDayId: nextDay.id, performedAt: today } })}
+                onPress={() =>
+                  startFromDay({
+                    data: {
+                      id: newId(),
+                      planDayId: nextDay.id,
+                      performedAt: today,
+                      exerciseIds: null,
+                    },
+                  })
+                }
               />
               <Button
                 label="Wybierz inny dzień"
@@ -174,7 +184,7 @@ export const WorkoutsScreen = () => {
             onPress={() =>
               createWorkout({
                 data: {
-                  userId,
+                  id: newId(),
                   name: `Trening ${formatShortDate()}`,
                   performedAt: today,
                   notes: null,

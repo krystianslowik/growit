@@ -36,6 +36,7 @@ export * from './updatePlanDayExerciseRequest';
 export * from './updatePlanDayRequest';
 export * from './updateTrainingPlanRequest';
 export * from './workoutByDateResponse';
+export * from './workoutExerciseIdAssignment';
 export * from './workoutExerciseResponse';
 export * from './workoutHistoryResponse';
 export * from './workoutResponse';
