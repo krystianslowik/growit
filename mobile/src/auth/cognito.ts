@@ -40,15 +40,30 @@ export class CognitoRejection extends Error {
 export const isCognitoRejection = (error: unknown): error is CognitoRejection =>
   error instanceof CognitoRejection;
 
+/// Matches the ceiling on the API client. Without one, these calls inherit the system
+/// TCP timeout - around a minute - and because the request interceptor awaits a refresh
+/// before anything is sent, that minute is spent inside the interceptor where no timeout
+/// of ours applies and the circuit breaker sees nothing at all.
+const CALL_TIMEOUT_MS = 12_000;
+
 const call = async <T>(action: Action, body: object): Promise<T> => {
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-amz-json-1.1',
-      'X-Amz-Target': `AWSCognitoIdentityProviderService.${action}`,
-    },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CALL_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': `AWSCognitoIdentityProviderService.${action}`,
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const text = await response.text();
   const payload = text ? JSON.parse(text) : {};

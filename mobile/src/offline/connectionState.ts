@@ -60,11 +60,17 @@ export const reduceConnection = (
     }
 
     case 'netinfo-changed':
-      // A link coming back earns the API an immediate retry rather than sitting out
-      // the rest of a 60s backoff.
-      return event.online
-        ? recovered({ ...state, netInfoOnline: true })
-        : { ...state, netInfoOnline: false };
+      if (!event.online) return { ...state, netInfoOnline: false };
+
+      // Only a link that actually came back earns the API an immediate retry. NetInfo
+      // fires on every change to what it tracks, not just on connectivity - a wifi to
+      // cellular handoff, a 4g to 5g switch, a reachability flag on iOS all arrive here
+      // as online:true. Treating those as recovery would clear a circuit we opened
+      // because requests were genuinely failing, waking the queue onto a link we
+      // already know is dead and spending its retries for nothing.
+      if (state.netInfoOnline) return state;
+
+      return recovered({ ...state, netInfoOnline: true });
 
     case 'forced-offline':
       return event.value

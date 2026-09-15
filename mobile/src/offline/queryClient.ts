@@ -1,5 +1,7 @@
-import { QueryClient } from '@tanstack/react-query';
-import { isPermanentError } from '../api/errors';
+import { MutationCache, QueryClient } from '@tanstack/react-query';
+import { dropSupersededWrites } from './coalesce';
+import { recordLostWrite } from './failedWrites';
+import { shouldRetryWrite } from './retryPolicy';
 import { registerMutationDefaults } from './mutationDefaults';
 
 /// Every write in the app shares one scope, which is what makes the mutation cache run
@@ -12,14 +14,24 @@ import { registerMutationDefaults } from './mutationDefaults';
 /// start a workout from it" crosses aggregates, and separate scopes would race.
 const WRITE_SCOPE = { id: 'growit-writes' };
 
-/// A write that keeps failing against a server that is up and answering should not loop
-/// forever. Offline does not consume these - the mutation is paused, not failed - and a
-/// flaky link trips the circuit breaker into offline before it gets far, so this budget
-/// is only ever spent on real trouble. Roughly two minutes with the default backoff.
-const MAX_WRITE_ATTEMPTS = 8;
-
 export const createQueryClient = () => {
+  const supersedable = new Set<string>();
+
+  // Cache-level rather than per-mutation: only this callback is handed the mutation that
+  // was just issued, and without that reference a write cannot tell itself apart from the
+  // ones it supersedes.
+  const mutationCache = new MutationCache({
+    onMutate: (_variables, mutation) => {
+      dropSupersededWrites(mutationCache, mutation, supersedable);
+    },
+    // Reached only once a write has stopped being retried, so this is where a write is
+    // finally lost. The optimistic patch it applied is still in the cache and offline
+    // nothing will refetch it away, so someone has to say so out loud.
+    onError: () => recordLostWrite(),
+  });
+
   const queryClient = new QueryClient({
+    mutationCache,
     defaultOptions: {
       queries: {
         // 'online', not 'offlineFirst': React Native has no HTTP cache underneath, so
@@ -35,8 +47,7 @@ export const createQueryClient = () => {
         networkMode: 'online',
         // The default is 0, and with it a write that failed once would be dropped on
         // the floor rather than queued.
-        retry: (failureCount, error) =>
-          !isPermanentError(error) && failureCount < MAX_WRITE_ATTEMPTS,
+        retry: shouldRetryWrite,
         scope: WRITE_SCOPE,
       },
     },
@@ -45,7 +56,7 @@ export const createQueryClient = () => {
   // Registered here rather than by the caller because the two cannot be separated: once
   // the queue is persisted, hydration rebuilds mutations through defaultMutationOptions,
   // and a key with no registered mutationFn comes back unable to run.
-  registerMutationDefaults(queryClient);
+  registerMutationDefaults(queryClient, supersedable);
 
   return queryClient;
 };

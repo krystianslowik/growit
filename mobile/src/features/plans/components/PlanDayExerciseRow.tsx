@@ -5,6 +5,7 @@ import Swipeable, { SwipeableMethods } from 'react-native-gesture-handler/Reanim
 import { Ionicons } from '@expo/vector-icons';
 import { PlanDayExerciseResponse } from '../../../api/generated/schemas';
 import { usePutApiTrainingPlansExercisesPlanDayExerciseId } from '../../../api/generated/training-plans/training-plans';
+import { useDebouncedWrite } from '../../../offline/useDebouncedWrite';
 import { Input } from '../../../theme/components/Input';
 import { tokens } from '../../../theme/tokens';
 
@@ -20,8 +21,8 @@ const SAVE_DELAY_MS = 600;
 
 export const PlanDayExerciseRow = ({ exercise, onDelete, pending = false }: Props) => {
   const swipeRef = useRef<SwipeableMethods>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { mutate: update } = usePutApiTrainingPlansExercisesPlanDayExerciseId();
+  const { schedule, cancel } = useDebouncedWrite(update, SAVE_DELAY_MS);
 
   const [isEditing, setIsEditing] = useState(false);
   const [targets, setTargets] = useState({
@@ -42,20 +43,16 @@ export const PlanDayExerciseRow = ({ exercise, onDelete, pending = false }: Prop
       targetSets === exercise.targetSets &&
       targetReps === exercise.targetReps &&
       restSeconds === exercise.restSeconds;
-    if (unchanged) return;
+    if (unchanged) {
+      cancel();
+      return;
+    }
 
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      update({
-        planDayExerciseId: exercise.id,
-        data: { targetSets, targetReps, restSeconds, orderIndex: exercise.orderIndex },
-      });
-    }, SAVE_DELAY_MS);
-
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [targets, isEditing, exercise, update]);
+    schedule({
+      planDayExerciseId: exercise.id,
+      data: { targetSets, targetReps, restSeconds, orderIndex: exercise.orderIndex },
+    });
+  }, [targets, isEditing, exercise, schedule, cancel]);
 
   const openEdit = () => {
     setTargets({

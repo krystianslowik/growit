@@ -81,6 +81,27 @@ describe('netinfo', () => {
     assert.equal(state.circuitOpen, false);
     assert.equal(statusOf(state), 'online');
   });
+
+  test('a network change while already connected does not clear the circuit', () => {
+    // NetInfo reports every change to what it tracks, not just connectivity: a wifi to
+    // cellular handoff arrives here as online:true with the link never having dropped.
+    // Reading that as recovery would wake the queue onto an API we already know is not
+    // answering, and burn a retry on every handoff.
+    const state = feed(
+      ...failures(CIRCUIT_OPENS_AFTER),
+      { type: 'netinfo-changed', online: true },
+    );
+
+    assert.equal(state.circuitOpen, true);
+    assert.equal(statusOf(state), 'offline');
+  });
+
+  test('a network change while already connected changes nothing at all', () => {
+    const before = feed(...failures(UNSTABLE_AFTER));
+    const after = reduceConnection(before, { type: 'netinfo-changed', online: true });
+
+    assert.equal(after, before);
+  });
 });
 
 describe('shouldProbe', () => {

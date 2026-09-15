@@ -1,5 +1,8 @@
 import { QueryClient, UseMutationOptions } from '@tanstack/react-query';
-import { getPostApiExercisesWorkoutExerciseIdSetsMutationOptions } from '../api/generated/exercises/exercises';
+import {
+  getGetApiExercisesQueryKey,
+  getPostApiExercisesWorkoutExerciseIdSetsMutationOptions,
+} from '../api/generated/exercises/exercises';
 import {
   getDeleteApiTrainingPlansDaysDayIdMutationOptions,
   getDeleteApiTrainingPlansExercisesPlanDayExerciseIdMutationOptions,
@@ -18,15 +21,21 @@ import {
   getPutApiTrainingPlansPlanIdMutationOptions,
 } from '../api/generated/training-plans/training-plans';
 import {
+  getGetApiWorkoutsWorkoutIdQueryKey,
   getPostApiWorkoutsFromPlanDayMutationOptions,
   getPostApiWorkoutsMutationOptions,
   getPostApiWorkoutsWorkoutIdExercisesMutationOptions,
 } from '../api/generated/workouts/workouts';
 import {
+  ExerciseResponse,
   PlanDayResponse,
+  WorkoutByDateResponse,
+  WorkoutExerciseResponse,
+  WorkoutResponse,
   TrainingPlanResponse,
   TrainingPlanSummaryResponse,
 } from '../api/generated/schemas';
+import { newId } from './ids';
 import { QueryFamily, optimistic } from './optimistic';
 
 const PLAN_DAY_KEY_PREFIX = '/api/training-plans/days/';
@@ -52,6 +61,48 @@ const patchPlanDayHolding = (
   }
 };
 
+const WORKOUT_BY_DATE_KEY_MARKER = '/by-date';
+
+/// The "today" screen reads a workout by user and date, and the user id is not in the
+/// mutation variables - it was dropped from the contract once the server started taking
+/// it from the token. So the entry is found by what it is rather than by its key.
+const patchWorkoutForDate = (
+  queryClient: QueryClient,
+  performedAt: string,
+  entry: WorkoutByDateResponse,
+) => {
+  const cached = queryClient.getQueriesData<WorkoutByDateResponse>({
+    predicate: (query) => {
+      const [first, params] = query.queryKey;
+      if (typeof first !== 'string' || !first.includes(WORKOUT_BY_DATE_KEY_MARKER)) return false;
+      return (params as { date?: string } | undefined)?.date === performedAt;
+    },
+  });
+
+  for (const [queryKey] of cached) {
+    queryClient.setQueryData<WorkoutByDateResponse>(queryKey, entry);
+  }
+};
+
+/// Seeds a session so the screen can be opened on our own id right away. Without this a
+/// tap made offline leaves the mutation paused forever, which reads on screen as a button
+/// stuck on "Zaczynam..." and an app that has hung.
+const seedWorkout = (queryClient: QueryClient, workout: WorkoutResponse) => {
+  queryClient.setQueryData<WorkoutResponse>(
+    getGetApiWorkoutsWorkoutIdQueryKey(workout.id),
+    workout,
+  );
+
+  patchWorkoutForDate(queryClient, workout.performedAt, {
+    id: workout.id,
+    name: workout.name,
+    performedAt: workout.performedAt,
+    exerciseCount: workout.exercises.length,
+    planDayId: workout.planDayId,
+    planDayName: workout.planDayName,
+  });
+};
+
 /// Everything a write does - the optimistic patch, the invalidation - lives here rather
 /// than at the call site, for two reasons.
 ///
@@ -68,7 +119,12 @@ const patchPlanDayHolding = (
 ///
 /// Registrations are built from orval's own factories, so regenerating the client after a
 /// contract change breaks the build rather than quietly detaching a key from its defaults.
-export const registerMutationDefaults = (queryClient: QueryClient) => {
+export const registerMutationDefaults = (
+  queryClient: QueryClient,
+  /// Filled in as we go: the keys whose queued writes may be thrown away when a newer
+  /// one for the same target arrives. See coalesce.ts.
+  supersedable: Set<string>,
+) => {
   // Taking orval's own options object means TVariables is inferred from the generated
   // client, so a contract change lands as a type error in the patch below rather than as
   // a silently mismatched field at runtime.
@@ -85,6 +141,16 @@ export const registerMutationDefaults = (queryClient: QueryClient) => {
       mutationFn: base.mutationFn,
       ...optimistic(queryClient, families, apply),
     });
+
+    return base.mutationKey;
+  };
+
+  /// For writes that carry the whole desired state of their target rather than a delta,
+  /// so an older queued copy of the same write is pure waste once a newer one exists.
+  const registerDesiredState: typeof register = (base, families, apply) => {
+    const mutationKey = register(base, families, apply);
+    supersedable.add(JSON.stringify(mutationKey));
+    return mutationKey;
   };
 
   // ---------------------------------------------------------------- training plans
@@ -93,24 +159,35 @@ export const registerMutationDefaults = (queryClient: QueryClient) => {
     getPostApiTrainingPlansMutationOptions(),
     ['plans'],
     ({ data }, client) => {
+      const listKey = getGetApiTrainingPlansQueryKey();
+      const plans = client.getQueryData<TrainingPlanSummaryResponse[]>(listKey);
+
+      // The server makes a user's first plan the active one, so guessing false here would
+      // have the today screen offer "Ułóż plan treningowy" next to a plan that was just
+      // created - for as long as the user stays offline.
+      const isActive = (plans?.length ?? 0) === 0;
+
       // Seeded so the screen can switch from "new" to "editing" on our own id, with no
       // round trip to wait for.
       client.setQueryData<TrainingPlanResponse>(getGetApiTrainingPlansPlanIdQueryKey(data.id), {
         id: data.id,
         name: data.name,
         notes: data.notes ?? null,
-        isActive: false,
+        isActive,
         days: [],
       });
 
-      client.setQueryData<TrainingPlanSummaryResponse[]>(getGetApiTrainingPlansQueryKey(), (old) =>
-        old ? [...old, { id: data.id, name: data.name, isActive: false, dayCount: 0 }] : old,
-      );
+      // Falling back to [entry] rather than leaving the list alone: a plan created before
+      // the list was ever loaded would otherwise not appear on it at all.
+      client.setQueryData<TrainingPlanSummaryResponse[]>(listKey, (old) => [
+        ...(old ?? []),
+        { id: data.id, name: data.name, isActive, dayCount: 0 },
+      ]);
     },
   );
 
-  register(
-    getPutApiTrainingPlansPlanIdMutationOptions(),
+  registerDesiredState(
+getPutApiTrainingPlansPlanIdMutationOptions(),
     ['plans'],
     ({ planId, data }, client) => {
       client.setQueryData<TrainingPlanResponse>(
@@ -133,8 +210,8 @@ export const registerMutationDefaults = (queryClient: QueryClient) => {
     },
   );
 
-  register(
-    getPutApiTrainingPlansPlanIdActiveMutationOptions(),
+  registerDesiredState(
+getPutApiTrainingPlansPlanIdActiveMutationOptions(),
     ['plans'],
     ({ planId }, client) => {
       // Exactly one plan is active, so the others have to give it up in the same breath.
@@ -172,13 +249,22 @@ export const registerMutationDefaults = (queryClient: QueryClient) => {
             }
           : old,
       );
+
+      // The plans list shows a day count per plan, and offline nothing else will correct
+      // it until the write lands.
+      client.setQueryData<TrainingPlanSummaryResponse[]>(getGetApiTrainingPlansQueryKey(), (old) =>
+        old?.map((plan) =>
+          plan.id === planId ? { ...plan, dayCount: plan.dayCount + 1 } : plan,
+        ),
+      );
     },
   );
 
-  register(getPutApiTrainingPlansPlanIdDaysOrderMutationOptions(), ['plans']);
+  registerDesiredState(
+getPutApiTrainingPlansPlanIdDaysOrderMutationOptions(), ['plans']);
 
-  register(
-    getPutApiTrainingPlansDaysDayIdMutationOptions(),
+  registerDesiredState(
+getPutApiTrainingPlansDaysDayIdMutationOptions(),
     ['plans'],
     ({ dayId, data }, client) => {
       client.setQueryData<PlanDayResponse>(getGetApiTrainingPlansDaysDayIdQueryKey(dayId), (old) =>
@@ -189,10 +275,11 @@ export const registerMutationDefaults = (queryClient: QueryClient) => {
 
   register(getDeleteApiTrainingPlansDaysDayIdMutationOptions(), ['plans']);
   register(getPostApiTrainingPlansDaysDayIdExercisesMutationOptions(), ['plans']);
-  register(getPutApiTrainingPlansDaysDayIdExercisesMutationOptions(), ['plans']);
+  registerDesiredState(
+getPutApiTrainingPlansDaysDayIdExercisesMutationOptions(), ['plans']);
 
-  register(
-    getPutApiTrainingPlansExercisesPlanDayExerciseIdMutationOptions(),
+  registerDesiredState(
+getPutApiTrainingPlansExercisesPlanDayExerciseIdMutationOptions(),
     ['plans'],
     ({ planDayExerciseId, data }, client) => {
       patchPlanDayHolding(client, planDayExerciseId, (day) => ({
@@ -227,8 +314,94 @@ export const registerMutationDefaults = (queryClient: QueryClient) => {
 
   // Starting or creating a session changes which day the today screen suggests next, so
   // these disturb the plan queries as well as the workout ones.
-  register(getPostApiWorkoutsMutationOptions(), ['workouts', 'plans']);
-  register(getPostApiWorkoutsFromPlanDayMutationOptions(), ['workouts', 'plans']);
-  register(getPostApiWorkoutsWorkoutIdExercisesMutationOptions(), ['workouts']);
+  register(getPostApiWorkoutsMutationOptions(), ['workouts', 'plans'], ({ data }, client) => {
+    seedWorkout(client, {
+      id: data.id,
+      name: data.name,
+      performedAt: data.performedAt,
+      notes: data.notes ?? null,
+      planDayId: null,
+      planDayName: null,
+      exercises: [],
+    });
+  });
+
+  register(
+    getPostApiWorkoutsFromPlanDayMutationOptions(),
+    ['workouts', 'plans'],
+    ({ data }, client) => {
+      // The session is a copy of the plan day, so the day in cache is what it should
+      // look like. If the day was never opened there is nothing to copy from and the
+      // exercises arrive with the refetch.
+      const day = client.getQueryData<PlanDayResponse>(
+        getGetApiTrainingPlansDaysDayIdQueryKey(data.planDayId),
+      );
+
+      // Ids the caller already promised the server, so the copy carries the same ones
+      // here as it will there.
+      const promised = new Map(
+        (data.exerciseIds ?? []).map((a) => [a.planDayExerciseId, a.workoutExerciseId]),
+      );
+
+      const exercises: WorkoutExerciseResponse[] = (day?.exercises ?? []).map((exercise) => ({
+        id: promised.get(exercise.id) ?? newId(),
+        exerciseId: exercise.exerciseId,
+        exerciseName: exercise.exerciseName,
+        category: exercise.category,
+        targetSets: exercise.targetSets,
+        targetReps: exercise.targetReps,
+        restSeconds: exercise.restSeconds,
+        orderIndex: exercise.orderIndex,
+        sets: [],
+      }));
+
+      seedWorkout(client, {
+        id: data.id,
+        name: day?.name ?? 'Trening',
+        performedAt: data.performedAt,
+        notes: null,
+        planDayId: data.planDayId,
+        planDayName: day?.name ?? null,
+        exercises,
+      });
+    },
+  );
+
+  register(
+    getPostApiWorkoutsWorkoutIdExercisesMutationOptions(),
+    ['workouts'],
+    ({ workoutId, data }, client) => {
+      const fromLibrary = client
+        .getQueryData<ExerciseResponse[]>(getGetApiExercisesQueryKey())
+        ?.find((exercise) => exercise.id === data.exerciseId);
+
+      client.setQueryData<WorkoutResponse>(
+        getGetApiWorkoutsWorkoutIdQueryKey(workoutId),
+        (old) =>
+          old
+            ? {
+                ...old,
+                exercises: [
+                  ...old.exercises,
+                  {
+                    id: data.id,
+                    exerciseId: data.exerciseId,
+                    // The payload carries only the id, so the name comes from the
+                    // library - which every screen that can reach this point has already
+                    // loaded and holds indefinitely.
+                    exerciseName: fromLibrary?.name ?? '',
+                    category: fromLibrary?.category ?? null,
+                    targetSets: data.targetSets,
+                    targetReps: data.targetReps,
+                    restSeconds: data.restSeconds,
+                    orderIndex: data.orderIndex,
+                    sets: [],
+                  },
+                ],
+              }
+            : old,
+      );
+    },
+  );
   register(getPostApiExercisesWorkoutExerciseIdSetsMutationOptions(), ['workouts']);
 };

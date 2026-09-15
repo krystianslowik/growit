@@ -11,6 +11,8 @@ import {
 import { Button } from '../../../theme/components/Button';
 import { tokens } from '../../../theme/tokens';
 import { newId } from '../../../offline/ids';
+import { planDayExerciseAssignments } from '../planDayAssignments';
+import { useQueryClient } from '@tanstack/react-query';
 import { getToday } from '../../../lib/date';
 import { exerciseCountLabel } from '../../../lib/plurals';
 
@@ -26,7 +28,12 @@ export const StartFromPlanDayScreen = ({ navigation }: Props) => {
     query: { enabled: !!activePlan },
   });
 
-  const { mutate: start, isPending } = usePostApiWorkoutsFromPlanDay();
+  const queryClient = useQueryClient();
+
+  // See WorkoutsScreen: a paused write is pending indefinitely, which would leave every
+  // row disabled until the network comes back.
+  const { mutate: start, isPending, isPaused } = usePostApiWorkoutsFromPlanDay();
+  const isStartingNow = isPending && !isPaused;
 
   if (isLoadingPlans || isLoadingPlan) {
     return (
@@ -51,14 +58,20 @@ export const StartFromPlanDayScreen = ({ navigation }: Props) => {
         renderItem={({ item, index }) => (
           <Pressable
             onPress={() =>
-              start(
-                {
-                  data: { id: newId(), planDayId: item.id, performedAt: today, exerciseIds: null },
-                },
-                { onSuccess: ({ id }) => navigation.replace('WorkoutDetail', { workoutId: id }) },
-              )
+              {
+                const id = newId();
+                start({
+                  data: {
+                    id,
+                    planDayId: item.id,
+                    performedAt: today,
+                    exerciseIds: planDayExerciseAssignments(queryClient, item.id),
+                  },
+                });
+                navigation.replace('WorkoutDetail', { workoutId: id });
+              }
             }
-            disabled={isPending}
+            disabled={isStartingNow}
             className="bg-surface rounded-md p-4 border border-line flex-row items-center gap-3"
           >
             <Text className="text-lime font-mono-md text-label tracking-label">{index + 1}</Text>

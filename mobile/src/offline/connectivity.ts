@@ -87,12 +87,10 @@ const runProbe = async () => {
 };
 
 const handleNetInfo = (netInfo: NetInfoState) => {
-  // isInternetReachable stays null until the first reachability check lands. Reading
-  // unknown as offline would pause every request during app start.
-  dispatch({
-    type: 'netinfo-changed',
-    online: netInfo.isConnected === true && netInfo.isInternetReachable !== false,
-  });
+  // Only isConnected, deliberately. isInternetReachable is the verdict of the probing we
+  // just turned off, and it stays null until that probing answers - so reading it would
+  // mean either pausing everything at app start or trusting a mechanism we no longer run.
+  dispatch({ type: 'netinfo-changed', online: netInfo.isConnected === true });
 };
 
 let started = false;
@@ -101,16 +99,20 @@ export const setupConnectivity = () => {
   if (started) return;
   started = true;
 
-  // Point reachability at our own API. Plain `isConnected` cannot tell "wifi works"
-  // from "wifi works but the API is down, or a captive portal is eating requests" -
-  // and the second case is the one that silently drains writes into timeouts.
-  NetInfo.configure({
-    reachabilityUrl: healthUrl,
-    reachabilityTest: async (response) => response.status === 200,
-    reachabilityLongTimeout: 60_000,
-    reachabilityShortTimeout: 5_000,
-    reachabilityRequestTimeout: PROBE_TIMEOUT_MS,
-  });
+  // NetInfo answers one question here and one only: is there a link at all. Whether the
+  // API is actually reachable is the circuit breaker's job further down, and letting
+  // both decide it was a mistake worth spelling out:
+  //
+  //   - useNativeReachability defaults to true, so on Android a reachabilityUrl is
+  //     ignored outright and the two platforms end up disagreeing about what "online"
+  //     means;
+  //   - where it did run, a down API made NetInfo report the link as unreachable, which
+  //     turned off shouldProbe() - disabling our own backoff in the exact situation it
+  //     was written for, while NetInfo hammered /health every five seconds with none.
+  //
+  // The breaker is the better judge anyway: it watches real requests rather than a
+  // synthetic one, and behaves the same on both platforms.
+  NetInfo.configure({ reachabilityShouldRun: () => false });
 
   NetInfo.addEventListener(handleNetInfo);
   void NetInfo.fetch().then(handleNetInfo);
@@ -122,9 +124,14 @@ export const setupConnectivity = () => {
   onlineManager.setEventListener(() => () => {});
 
   focusManager.setEventListener((handleFocus) => {
-    const subscription = AppState.addEventListener('change', (appState) =>
-      handleFocus(appState === 'active'),
-    );
+    const subscription = AppState.addEventListener('change', (appState) => {
+      // iOS reports 'inactive' for things that are not really leaving the app: the
+      // notification centre, the app switcher, a system alert. Treating those as a loss
+      // of focus means a full refetch of everything stale the moment the user pulls down
+      // the status bar and lets go.
+      if (appState === 'inactive') return;
+      handleFocus(appState === 'active');
+    });
     return () => subscription.remove();
   });
 

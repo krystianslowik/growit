@@ -35,6 +35,15 @@ public class GrowItDbContext(DbContextOptions<GrowItDbContext> options) : DbCont
         {
             throw new ConflictException("A row with this id already exists.", exception);
         }
+        catch (DbUpdateException exception)
+            when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation })
+        {
+            // Something the write points at is not there - a library exercise that has
+            // since been removed, a parent whose own write never landed. Left unmapped
+            // this surfaced as a 500, which a queued write reads as "try again" and then
+            // does, forever.
+            throw new NotFoundException("A row this write refers to does not exist.");
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

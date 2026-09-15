@@ -10,6 +10,11 @@ type Variant = 'offline' | 'unstable' | 'restored';
 /// A connection wobbling around the threshold would otherwise flash the banner on and
 /// off; 'unstable' has to hold for this long before it is worth saying.
 const UNSTABLE_DELAY_MS = 3_000;
+
+/// Losing the link deserves a faster answer than a degrading one, but not an instant one:
+/// NetInfo blips in and straight back out often enough that announcing it immediately
+/// just makes the banner flicker. Short enough to still feel like a reaction.
+const OFFLINE_DELAY_MS = 800;
 const RESTORED_VISIBLE_MS = 2_000;
 
 /// Announcing recovery only makes sense if the user had time to notice the outage.
@@ -28,15 +33,16 @@ export const ConnectionBanner = () => {
   const outageStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
-    if (status === 'offline') {
+    if (status !== 'online') {
       outageStartedAt.current ??= Date.now();
-      setVariant('offline');
-      return;
-    }
 
-    if (status === 'unstable') {
-      outageStartedAt.current ??= Date.now();
-      const timer = setTimeout(() => setVariant('unstable'), UNSTABLE_DELAY_MS);
+      // Whatever we were saying, we are not restored any more. Without this a green
+      // "Połączono ponownie" would sit on screen through the delay below, announcing
+      // success at the exact moment the connection is falling apart.
+      setVariant((current) => (current === 'restored' ? null : current));
+
+      const delay = status === 'offline' ? OFFLINE_DELAY_MS : UNSTABLE_DELAY_MS;
+      const timer = setTimeout(() => setVariant(status), delay);
       return () => clearTimeout(timer);
     }
 

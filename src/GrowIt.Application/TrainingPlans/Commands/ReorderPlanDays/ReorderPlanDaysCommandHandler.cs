@@ -1,3 +1,5 @@
+using FluentValidation;
+using GrowIt.Application.Common.Exceptions;
 using GrowIt.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +17,7 @@ public class ReorderPlanDaysCommandHandler(IApplicationDbContext dbContext)
 
         if (days.Count == 0)
         {
-            throw new KeyNotFoundException($"Training plan {request.PlanId} not found");
+            throw new NotFoundException($"Training plan {request.PlanId} not found");
         }
 
         // Reject a partial list outright: applying it would silently leave the days
@@ -24,7 +26,9 @@ public class ReorderPlanDaysCommandHandler(IApplicationDbContext dbContext)
         if (submitted.Count != request.DayIds.Count || !days.All(d => submitted.Contains(d.Id))
             || submitted.Count != days.Count)
         {
-            throw new ArgumentException("The order must list every day of the plan exactly once");
+            // Not a 500: the request will never be right, and saying so as a server
+            // error would have the client retry it until its budget ran out.
+            throw new ValidationException("The order must list every day of the plan exactly once");
         }
 
         for (var index = 0; index < request.DayIds.Count; index++)

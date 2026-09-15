@@ -15,6 +15,8 @@ import { WorkoutSummaryResponse } from '../../../api/generated/schemas';
 import { Button } from '../../../theme/components/Button';
 import { tokens } from '../../../theme/tokens';
 import { newId } from '../../../offline/ids';
+import { planDayExerciseAssignments } from '../planDayAssignments';
+import { useQueryClient } from '@tanstack/react-query';
 import { getToday, formatWeekdayDayMonth, formatDayMonth, formatShortDate } from '../../../lib/date';
 import { exerciseCountLabel } from '../../../lib/plurals';
 import { useAuth, useUserId } from '../../../auth/AuthContext';
@@ -54,11 +56,18 @@ export const WorkoutsScreen = () => {
   // an empty string - falsy either way, so the check below covers both.
   const { data: nextDay } = useGetApiTrainingPlansNextDay();
 
-  const { mutate: createWorkout, isPending: isCreatingEmpty } = usePostApiWorkouts();
+  const queryClient = useQueryClient();
 
-  // Navigation stays on the server's answer for now: nothing seeds a workout into the
-  // cache yet, so opening it early would land on a screen with nothing to read.
-  const { mutate: startFromDay, isPending: isStartingDay } = usePostApiWorkoutsFromPlanDay();
+  // A paused write stays pending for as long as there is no signal, so binding a button
+  // to isPending alone would leave it spinning and disabled until the network returns.
+  // Only a write actually in flight is worth waiting on.
+  const { mutate: createWorkout, isPending: isCreatingEmpty, isPaused: isCreatePaused } =
+    usePostApiWorkouts();
+  const { mutate: startFromDay, isPending: isStartingDay, isPaused: isStartPaused } =
+    usePostApiWorkoutsFromPlanDay();
+
+  const isCreatingNow = isCreatingEmpty && !isCreatePaused;
+  const isStartingNow = isStartingDay && !isStartPaused;
 
   if (isLoading) {
     return (
@@ -129,25 +138,24 @@ export const WorkoutsScreen = () => {
                 </Text>
               </View>
               <Button
-                label={isStartingDay ? 'Zaczynam...' : `Zacznij ${nextDay.name} →`}
+                label={isStartingNow ? 'Zaczynam...' : `Zacznij ${nextDay.name} →`}
                 variant="primary"
-                loading={isStartingDay}
-                disabled={isStartingDay}
-                onPress={() =>
-                  startFromDay(
-                    {
-                      data: {
-                        id: newId(),
-                        planDayId: nextDay.id,
-                        performedAt: today,
-                        exerciseIds: null,
-                      },
+                loading={isStartingNow}
+                disabled={isStartingNow}
+                onPress={() => {
+                  // Our own id, so the session opens straight away - the registry has
+                  // already seeded it into the cache by the time we navigate.
+                  const id = newId();
+                  startFromDay({
+                    data: {
+                      id,
+                      planDayId: nextDay.id,
+                      performedAt: today,
+                      exerciseIds: planDayExerciseAssignments(queryClient, nextDay.id),
                     },
-                    {
-                      onSuccess: ({ id }) => navigation.navigate('WorkoutDetail', { workoutId: id }),
-                    },
-                  )
-                }
+                  });
+                  navigation.navigate('WorkoutDetail', { workoutId: id });
+                }}
               />
               <Button
                 label="Wybierz inny dzień"
@@ -166,8 +174,8 @@ export const WorkoutsScreen = () => {
           <Button
             label="Pusty trening"
             variant="secondary"
-            loading={isCreatingEmpty}
-            disabled={isCreatingEmpty}
+            loading={isCreatingNow}
+            disabled={isCreatingNow}
             onPress={() =>
               createWorkout({
                 data: {

@@ -13,6 +13,7 @@ import { darkStackOptions } from './screenOptions';
 import { tokens } from '../theme/tokens';
 import { useAuth } from '../auth/AuthContext';
 import { ConnectionBanner } from '../offline/ConnectionBanner';
+import { LostWritesBanner } from '../offline/LostWritesBanner';
 
 const Tab = createBottomTabNavigator();
 const Root = createNativeStackNavigator<RootStackParamList>();
@@ -100,6 +101,7 @@ export const RootNavigator = () => {
       {/* Outside the navigator so it survives every screen change, and overlaid rather
           than stacked so showing it never reflows the screen underneath. */}
       <ConnectionBanner />
+      <LostWritesBanner />
     </View>
   );
 };

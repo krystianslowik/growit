@@ -40,7 +40,16 @@ export const optimistic = <TVariables>(
     onMutate: async (variables: TVariables) => {
       // Stop any refetch already in the air: letting it land after the patch would
       // overwrite the optimistic row with the state the server held a moment ago.
-      await queryClient.cancelQueries({ predicate });
+      //
+      // Only refetches, though - never a first load. cancelQueries reverts by default,
+      // and reverting a query that has no data yet leaves it pending with fetchStatus
+      // idle and nothing to restart it, so the screen waiting on it silently falls into
+      // its empty state until something remounts. A query with no data also has nothing
+      // for a late response to overwrite, so there is no reason to touch it.
+      await queryClient.cancelQueries({
+        predicate: (query) => predicate(query) && query.state.data !== undefined,
+      });
+
       apply?.(variables, queryClient);
     },
     // Fires on success and on final failure, but never while a write sits queued

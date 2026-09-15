@@ -11,8 +11,23 @@ public class GetNextPlanDayQueryHandler(IApplicationDbContext dbContext)
     public async Task<PlanDaySummaryResponse?> Handle(
         GetNextPlanDayQuery request, CancellationToken cancellationToken)
     {
+        // One plan at a time, chosen explicitly. Two creates racing from different
+        // devices can each believe they are the user's first and both come out active;
+        // reading every active plan at once would then blend two programmes into one
+        // rotation and suggest days that belong together in neither.
+        var activePlanId = await dbContext.TrainingPlans
+            .Where(p => p.UserId == request.UserId && p.IsActive)
+            .OrderBy(p => p.CreatedAt)
+            .Select(p => (Guid?)p.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (activePlanId is null)
+        {
+            return null;
+        }
+
         var days = await dbContext.TrainingPlanDays
-            .Where(d => d.Plan.UserId == request.UserId && d.Plan.IsActive)
+            .Where(d => d.PlanId == activePlanId)
             .OrderBy(d => d.OrderIndex)
             .Select(d => new PlanDaySummaryResponse(d.Id, d.Name, d.OrderIndex, d.Exercises.Count))
             .ToListAsync(cancellationToken);

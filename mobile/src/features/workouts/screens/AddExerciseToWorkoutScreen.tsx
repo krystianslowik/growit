@@ -29,7 +29,10 @@ export const AddExerciseToWorkoutScreen = ({ route, navigation }: Props) => {
     );
     return workout?.exercises.length ?? 0;
   };
-  const { mutate: addExercise, isPending } = usePostApiWorkoutsWorkoutIdExercises();
+  // See WorkoutsScreen: a paused write never settles, so isPending alone would leave
+  // every row in the list disabled after the first tap.
+  const { mutate: addExercise, isPending, isPaused } = usePostApiWorkoutsWorkoutIdExercises();
+  const isAddingNow = isPending && !isPaused;
 
   if (isLoading) {
     return (
@@ -47,25 +50,24 @@ export const AddExerciseToWorkoutScreen = ({ route, navigation }: Props) => {
       renderItem={({ item }) => (
         <Pressable
           className="bg-surface rounded-md p-4 border border-line"
-          onPress={() =>
-            addExercise(
-              {
-                workoutId,
-                data: {
-                  id: newId(),
-                  exerciseId: item.id,
-                  orderIndex: nextOrderIndex(),
-                  targetSets: null,
-                  targetReps: null,
-                  restSeconds: null,
-                },
+          onPress={() => {
+            addExercise({
+              workoutId,
+              data: {
+                id: newId(),
+                exerciseId: item.id,
+                orderIndex: nextOrderIndex(),
+                targetSets: null,
+                targetReps: null,
+                restSeconds: null,
               },
-              // Closing early would drop the user back on a list that does not show what
-              // they just added - no workout optimism yet. Revisit with phase 6.
-              { onSuccess: () => navigation.goBack() },
-            )
-          }
-          disabled={isPending}
+            });
+            // Safe to close on the spot: the registry has already appended the row to
+            // the cached workout, so the screen behind us shows it whether or not the
+            // write has left the device.
+            navigation.goBack();
+          }}
+          disabled={isAddingNow}
         >
           <Text className="text-fg font-sans-sb text-body-lg">{item.name}</Text>
           <Text className="text-muted font-mono-md text-label-sm tracking-label uppercase mt-1">

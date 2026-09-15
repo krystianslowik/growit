@@ -30,22 +30,24 @@ public class DeleteTrainingPlanCommandHandler(IApplicationDbContext dbContext)
             workout.PlanDayId = null;
         }
 
-        dbContext.TrainingPlans.Remove(plan);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        // Losing the active plan would leave the today screen with nothing to suggest.
+        // Losing the active plan would leave the today screen with nothing to suggest, so
+        // the successor is chosen before anything is written. Two separate saves would
+        // leave a user with no active plan at all if the second never happened - a state
+        // nothing later corrects.
         if (plan.IsActive)
         {
             var fallback = await dbContext.TrainingPlans
-                .Where(p => p.UserId == request.UserId)
+                .Where(p => p.UserId == request.UserId && p.Id != plan.Id)
                 .OrderBy(p => p.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (fallback is not null)
             {
                 fallback.IsActive = true;
-                await dbContext.SaveChangesAsync(cancellationToken);
             }
         }
+
+        dbContext.TrainingPlans.Remove(plan);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

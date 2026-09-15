@@ -21,7 +21,10 @@ let cachedAccessToken: StoredAccessToken | null = null;
 const toExpiry = (stored: string | null): number => Number(stored ?? 0) || 0;
 
 export const saveSession = async (session: Session): Promise<void> => {
-  cachedAccessToken = { token: session.tokens.accessToken, expiresAt: session.expiresAt };
+  // Anything already cached describes the session being replaced, so it has to go before
+  // the write rather than after: a failed write must not leave a token in memory that is
+  // not on disk, and the next read should go and find out what is really stored.
+  cachedAccessToken = null;
 
   await Promise.all([
     SecureStore.setItemAsync(ACCESS_TOKEN_KEY, session.tokens.accessToken),
@@ -32,6 +35,8 @@ export const saveSession = async (session: Session): Promise<void> => {
     SecureStore.setItemAsync(USER_ID_KEY, session.userId),
     SecureStore.setItemAsync(EXPIRES_AT_KEY, String(session.expiresAt)),
   ]);
+
+  cachedAccessToken = { token: session.tokens.accessToken, expiresAt: session.expiresAt };
 };
 
 export const loadSession = async (): Promise<Session | null> => {
