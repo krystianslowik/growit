@@ -14,8 +14,10 @@ public class CreatePlanDayCommandHandler(IApplicationDbContext dbContext)
     {
         // Before anything else: a retry must not push the order along a second time.
         if (await IdempotencyGuard.AlreadyCreatedAsync(
-                dbContext.TrainingPlanDays.Where(d => d.Id == request.Id).Select(d => d.Plan.UserId),
-                request.Id, request.UserId, cancellationToken))
+                dbContext.TrainingPlanDays
+                    .Where(d => d.Id == request.Id)
+                    .Select(d => new ExistingRow(d.Plan.UserId, d.PlanId)),
+                request.Id, request.UserId, request.PlanId, cancellationToken))
         {
             return request.Id;
         }

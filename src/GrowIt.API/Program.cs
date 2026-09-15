@@ -91,3 +91,8 @@ app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
+
+/// Named so the test host can boot the real pipeline - validation, exception mapping,
+/// controllers and all - rather than calling handlers directly and missing every layer
+/// this file puts in front of them.
+public partial class Program;

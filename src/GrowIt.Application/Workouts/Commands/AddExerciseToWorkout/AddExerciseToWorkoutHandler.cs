@@ -13,8 +13,10 @@ public class AddExerciseToWorkoutHandler(IApplicationDbContext dbContext)
     public async Task<Guid> Handle(AddExerciseToWorkoutCommand request, CancellationToken cancellationToken)
     {
         if (await IdempotencyGuard.AlreadyCreatedAsync(
-                dbContext.WorkoutExercises.Where(e => e.Id == request.Id).Select(e => e.Workout.UserId),
-                request.Id, request.UserId, cancellationToken))
+                dbContext.WorkoutExercises
+                    .Where(e => e.Id == request.Id)
+                    .Select(e => new ExistingRow(e.Workout.UserId, e.WorkoutId)),
+                request.Id, request.UserId, request.WorkoutId, cancellationToken))
         {
             return request.Id;
         }

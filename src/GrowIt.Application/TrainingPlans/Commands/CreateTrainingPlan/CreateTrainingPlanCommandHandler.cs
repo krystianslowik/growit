@@ -12,8 +12,10 @@ public class CreateTrainingPlanCommandHandler(IApplicationDbContext dbContext)
     public async Task<Guid> Handle(CreateTrainingPlanCommand request, CancellationToken cancellationToken)
     {
         if (await IdempotencyGuard.AlreadyCreatedAsync(
-                dbContext.TrainingPlans.Where(p => p.Id == request.Id).Select(p => p.UserId),
-                request.Id, request.UserId, cancellationToken))
+                dbContext.TrainingPlans
+                    .Where(p => p.Id == request.Id)
+                    .Select(p => new ExistingRow(p.UserId, p.UserId)),
+                request.Id, request.UserId, request.UserId, cancellationToken))
         {
             return request.Id;
         }

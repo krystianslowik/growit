@@ -21,10 +21,15 @@ const write = (
 ): FakeMutation => ({ options: { mutationKey }, state: { isPaused: paused, variables } });
 
 /// Stands in for the real cache: dropSupersededWrites only ever reads getAll and removes.
+///
+/// getAll returns a copy, as the real MutationCache does. Handing back the live array
+/// instead would let remove() splice it out from under the loop reading it, and the stand-in
+/// would then disagree with production on exactly the case that matters - three queued
+/// edits to one target. See queue.test.ts for the same behaviour against the real cache.
 const fakeCache = (queue: FakeMutation[]) => {
   const removed: FakeMutation[] = [];
   const cache = {
-    getAll: () => queue,
+    getAll: () => [...queue],
     remove: (mutation: FakeMutation) => {
       removed.push(mutation);
       queue.splice(queue.indexOf(mutation), 1);

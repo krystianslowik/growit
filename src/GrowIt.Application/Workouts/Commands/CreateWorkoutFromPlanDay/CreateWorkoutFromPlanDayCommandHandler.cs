@@ -13,8 +13,12 @@ public class CreateWorkoutFromPlanDayCommandHandler(IApplicationDbContext dbCont
     public async Task<Guid> Handle(CreateWorkoutFromPlanDayCommand request, CancellationToken cancellationToken)
     {
         if (await IdempotencyGuard.AlreadyCreatedAsync(
-                dbContext.Workouts.Where(w => w.Id == request.Id).Select(w => w.UserId),
-                request.Id, request.UserId, cancellationToken))
+                dbContext.Workouts
+                    .Where(w => w.Id == request.Id)
+                    // The plan day is the parent here, so an id already spent on a plain
+                    // workout is caught rather than answered as a successful retry.
+                    .Select(w => new ExistingRow(w.UserId, w.PlanDayId ?? Guid.Empty)),
+                request.Id, request.UserId, request.PlanDayId, cancellationToken))
         {
             return request.Id;
         }

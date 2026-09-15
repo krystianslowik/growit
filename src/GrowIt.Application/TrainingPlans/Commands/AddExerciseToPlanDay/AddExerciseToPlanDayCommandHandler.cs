@@ -15,8 +15,8 @@ public class AddExerciseToPlanDayCommandHandler(IApplicationDbContext dbContext)
         if (await IdempotencyGuard.AlreadyCreatedAsync(
                 dbContext.TrainingPlanDayExercises
                     .Where(e => e.Id == request.Id)
-                    .Select(e => e.PlanDay.Plan.UserId),
-                request.Id, request.UserId, cancellationToken))
+                    .Select(e => new ExistingRow(e.PlanDay.Plan.UserId, e.PlanDayId)),
+                request.Id, request.UserId, request.PlanDayId, cancellationToken))
         {
             return request.Id;
         }

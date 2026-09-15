@@ -16,8 +16,8 @@ public class LogSetCommandHandler(IApplicationDbContext dbContext) : IRequestHan
         if (await IdempotencyGuard.AlreadyCreatedAsync(
                 dbContext.Sets
                     .Where(s => s.Id == request.Id)
-                    .Select(s => s.WorkoutExercise.Workout.UserId),
-                request.Id, request.UserId, cancellationToken))
+                    .Select(s => new ExistingRow(s.WorkoutExercise.Workout.UserId, s.WorkoutExerciseId)),
+                request.Id, request.UserId, request.WorkoutExerciseId, cancellationToken))
         {
             return request.Id;
         }
