@@ -69,8 +69,13 @@ const PersistedQueries = ({ userId, children }: { userId: string; children: Reac
     <PersistQueryClientProvider
       client={queryClient}
       persistOptions={persistOptions}
-      // Whatever was queued when the app was last killed goes out now.
-      onSuccess={() => queryClient.resumePausedMutations()}
+      // Deliberately not returning the promise. The provider chains whatever onSuccess
+      // gives back into the same .finally that clears isRestoring, and resuming a queue
+      // that cannot run yet settles only once it does - which would hold the app on a
+      // loading screen for as long as the writes are waiting.
+      onSuccess={() => {
+        void queryClient.resumePausedMutations();
+      }}
     >
       {children}
     </PersistQueryClientProvider>

@@ -60,6 +60,15 @@ const dispatch = (event: ConnectionEvent) => {
 
   const next = statusOf(state);
   if (next === status) return;
+
+  if (__DEV__) {
+    console.log(`[net] ${status} -> ${next}`, {
+      netInfoOnline: state.netInfoOnline,
+      failures: state.consecutiveFailures,
+      circuitOpen: state.circuitOpen,
+    });
+  }
+
   status = next;
   listeners.forEach((listener) => listener());
 };
