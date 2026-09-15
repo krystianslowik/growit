@@ -2,10 +2,10 @@
 // Stateless Cognito calls (sign-up, confirmation) live in features/auth/hooks instead.
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { signIn as cognitoSignIn, revokeRefreshToken, Session } from './cognito';
 import { saveSession, loadSession, clearSession } from './tokenStorage';
 import { setSessionExpiredHandler } from './sessionExpiry';
+import { persistPendingWrites } from '../offline/pendingWrites';
 
 type AuthState = {
   isBootstrapping: boolean;
@@ -20,7 +20,6 @@ type AuthState = {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
 
@@ -32,13 +31,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     setSessionExpiredHandler(() => {
+      // Nothing is cleared here any more. queryClient.clear() empties the mutation cache
+      // as well as the query cache, and this path fires exactly when that cache is at its
+      // fullest - a session expiring is usually a session that has been offline. The
+      // queue is written to disk instead, and the next sign-in as the same user picks it
+      // back up; isolation between accounts comes from the per-user client in QueryLayer.
+      void persistPendingWrites();
       setSession(null);
-      queryClient.clear();
       void clearSession();
     });
 
     return () => setSessionExpiredHandler(null);
-  }, [queryClient]);
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     const next = await cognitoSignIn(email, password);
@@ -48,11 +52,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     const current = session;
-    // Drop the session first: the user asked to leave, and a failure further down
-    // must not leave them stuck inside. Clearing the cache stops the next account
-    // from seeing the previous one's workouts.
+
+    // Flush before the client goes away: persistence is throttled, so the last write or
+    // two may only exist in memory. They stay under this user's key and are picked up
+    // when they sign back in.
+    await persistPendingWrites();
+
+    // Drop the session first: the user asked to leave, and a failure further down must
+    // not leave them stuck inside. The next account gets a client of its own, so there
+    // is nothing here to clear.
     setSession(null);
-    queryClient.clear();
 
     try {
       await clearSession();

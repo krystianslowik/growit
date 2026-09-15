@@ -257,6 +257,24 @@ public class SetPlanDayExercisesTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_fresh_id_for_an_exercise_the_day_already_has_keeps_the_tuned_row()
+    {
+        // What a second device does when its copy of the day is out of date: it mints an id
+        // for an exercise the day already holds. Honouring that id would drop the bench row
+        // and rebuild it on the defaults, losing the 5x5x180 the user set on another phone.
+        await RunAsync(
+            new PlanDayExerciseSelectionInput(Guid.CreateVersion7(), BenchPress, null),
+            new PlanDayExerciseSelectionInput(_dumbbellRowId, null, null));
+
+        var rows = await ReadDayAsync();
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(_benchRowId, rows[0].Id);
+        Assert.Equal(5, rows[0].TargetSets);
+        Assert.Equal(180, rows[0].RestSeconds);
+    }
+
+    [Fact]
     public async Task Refuses_an_id_that_already_belongs_to_another_day()
     {
         // Taking over a row that exists elsewhere is the one thing client-supplied ids

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { View, Text, Pressable, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Pressable, FlatList, Alert } from 'react-native';
 import { RectButton } from 'react-native-gesture-handler';
 import Swipeable, { SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import {
 import { TrainingPlanSummaryResponse } from '../../../api/generated/schemas';
 import { Button } from '../../../theme/components/Button';
 import { tokens } from '../../../theme/tokens';
+import { ScreenState, screenStateOf } from '../../../theme/components/ScreenState';
 import { dayCountLabel } from '../../../lib/plurals';
 
 type Props = NativeStackScreenProps<PlansStackParamList, 'PlansList'>;
@@ -77,17 +78,13 @@ const PlanRow = ({ plan, onPress, onDelete }: RowProps) => {
 };
 
 export const PlansListScreen = ({ navigation }: Props) => {
-  const { data: plans, isLoading } = useGetApiTrainingPlans();
+  const plansQuery = useGetApiTrainingPlans();
+  const plans = plansQuery.data;
+  const screenState = screenStateOf(plansQuery);
 
   const { mutate: remove } = useDeleteApiTrainingPlansPlanId();
 
-  if (isLoading) {
-    return (
-      <View className="flex-1 bg-bg items-center justify-center">
-        <ActivityIndicator color={tokens.color.lime} />
-      </View>
-    );
-  }
+  if (screenState) return <ScreenState kind={screenState} />;
 
   return (
     <View className="flex-1 bg-bg">

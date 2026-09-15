@@ -11,6 +11,7 @@ import { SettingsScreen } from '../features/settings/screens/SettingsScreen';
 import { RootStackParamList } from './types';
 import { darkStackOptions } from './screenOptions';
 import { tokens } from '../theme/tokens';
+import { useIsRestoring } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
 import { ConnectionBanner } from '../offline/ConnectionBanner';
 import { LostWritesBanner } from '../offline/LostWritesBanner';
@@ -62,10 +63,15 @@ const navigationTheme = {
 
 export const RootNavigator = () => {
   const { isAuthed, isBootstrapping } = useAuth();
+  const isRestoring = useIsRestoring();
 
   // Hold the splash until the stored session is read, otherwise a returning user
   // sees the auth stack flash before being dropped into the tabs.
-  if (isBootstrapping) {
+  //
+  // The same goes for the cache coming back off disk: no query runs while it is being
+  // restored, so rendering now would show every screen as empty for a moment and then
+  // fill in - which reads as data that was lost and then found.
+  if (isBootstrapping || isRestoring) {
     return (
       <View className="flex-1 bg-bg items-center justify-center">
         <ActivityIndicator color={tokens.color.lime} />

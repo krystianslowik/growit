@@ -14,12 +14,11 @@ type Props = {
   onDelete: () => void;
   /// The row only exists in the optimistic cache so far - the server has not handed back
   /// a real id yet, so editing or deleting it would address a row that does not exist.
-  pending?: boolean;
 };
 
 const SAVE_DELAY_MS = 600;
 
-export const PlanDayExerciseRow = ({ exercise, onDelete, pending = false }: Props) => {
+export const PlanDayExerciseRow = ({ exercise, onDelete }: Props) => {
   const swipeRef = useRef<SwipeableMethods>(null);
   const { mutate: update } = usePutApiTrainingPlansExercisesPlanDayExerciseId();
   const { schedule, cancel } = useDebouncedWrite(update, SAVE_DELAY_MS);
@@ -85,17 +84,6 @@ export const PlanDayExerciseRow = ({ exercise, onDelete, pending = false }: Prop
       </RectButton>
     </View>
   );
-
-  if (pending) {
-    return (
-      <View className="bg-surface rounded-md p-4 border border-line opacity-60">
-        <Text className="text-fg font-sans-sb text-body-lg">{exercise.exerciseName}</Text>
-        <Text className="text-muted font-mono-md text-label-sm tracking-label uppercase mt-1">
-          Zapisywanie…
-        </Text>
-      </View>
-    );
-  }
 
   if (isEditing) {
     return (

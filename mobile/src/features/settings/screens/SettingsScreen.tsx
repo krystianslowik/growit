@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Switch, Text, View } from 'react-native';
+import { Alert, Switch, Text, View } from 'react-native';
 import { Button } from '../../../theme/components/Button';
 import { useAuth } from '../../../auth/AuthContext';
 import { forceOffline, isForcedOffline } from '../../../offline/connectivity';
+import { pendingWriteCount } from '../../../offline/pendingWrites';
 import { tokens } from '../../../theme/tokens';
 
 /// Flips the same flag the circuit breaker uses, so the offline path under test is the
@@ -37,6 +38,26 @@ const OfflineSimulator = () => {
 export const SettingsScreen = () => {
   const { email, signOut } = useAuth();
 
+  /// Signing out with writes still queued does not lose them - they stay on disk under
+  /// this account and go out at the next sign-in - but leaving without being told would
+  /// look exactly like losing them.
+  const confirmSignOut = () => {
+    const waiting = pendingWriteCount();
+    if (waiting === 0) {
+      void signOut();
+      return;
+    }
+
+    Alert.alert(
+      'Masz niezapisane zmiany',
+      'Część zmian czeka na połączenie. Wyślemy je, gdy zalogujesz się ponownie na to konto.',
+      [
+        { text: 'Anuluj', style: 'cancel' },
+        { text: 'Wyloguj mimo to', style: 'destructive', onPress: () => void signOut() },
+      ],
+    );
+  };
+
   return (
     <View className="flex-1 bg-bg px-6 pt-6 pb-10">
       <Text className="text-muted font-mono-md text-label tracking-label uppercase mb-3">
@@ -51,7 +72,7 @@ export const SettingsScreen = () => {
       {__DEV__ && <OfflineSimulator />}
 
       <View className="mt-auto">
-        <Button label="Wyloguj się" variant="secondary" onPress={signOut} />
+        <Button label="Wyloguj się" variant="secondary" onPress={confirmSignOut} />
       </View>
     </View>
   );

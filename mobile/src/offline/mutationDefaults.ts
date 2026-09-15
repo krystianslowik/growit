@@ -62,6 +62,7 @@ const patchPlanDayHolding = (
 };
 
 const WORKOUT_BY_DATE_KEY_MARKER = '/by-date';
+const WORKOUT_KEY_PREFIX = '/api/Workouts/';
 
 /// The "today" screen reads a workout by user and date, and the user id is not in the
 /// mutation variables - it was dropped from the contract once the server started taking
@@ -81,6 +82,37 @@ const patchWorkoutForDate = (
 
   for (const [queryKey] of cached) {
     queryClient.setQueryData<WorkoutByDateResponse>(queryKey, entry);
+  }
+};
+
+/// A logged set names only the exercise it belongs to, not the session - so the session is
+/// found by looking for whichever cached one is holding that exercise. The shape of the
+/// data is what tells a workout apart from the by-date and history entries that share its
+/// key prefix.
+const patchWorkoutHolding = (
+  queryClient: QueryClient,
+  workoutExerciseId: string,
+  patch: (exercise: WorkoutExerciseResponse) => WorkoutExerciseResponse,
+) => {
+  const cached = queryClient.getQueriesData<WorkoutResponse>({
+    predicate: (query) => {
+      const [first] = query.queryKey;
+      if (typeof first !== 'string' || !first.startsWith(WORKOUT_KEY_PREFIX)) return false;
+
+      const workout = query.state.data as WorkoutResponse | undefined;
+      return workout?.exercises?.some((exercise) => exercise.id === workoutExerciseId) === true;
+    },
+  });
+
+  for (const [queryKey, workout] of cached) {
+    if (!workout) continue;
+
+    queryClient.setQueryData<WorkoutResponse>(queryKey, {
+      ...workout,
+      exercises: workout.exercises.map((exercise) =>
+        exercise.id === workoutExerciseId ? patch(exercise) : exercise,
+      ),
+    });
   }
 };
 
@@ -403,5 +435,17 @@ getPutApiTrainingPlansExercisesPlanDayExerciseIdMutationOptions(),
       );
     },
   );
-  register(getPostApiExercisesWorkoutExerciseIdSetsMutationOptions(), ['workouts']);
+  register(
+    getPostApiExercisesWorkoutExerciseIdSetsMutationOptions(),
+    ['workouts'],
+    ({ workoutExerciseId, data }, client) => {
+      patchWorkoutHolding(client, workoutExerciseId, (exercise) => ({
+        ...exercise,
+        sets: [
+          ...exercise.sets,
+          { id: data.id, weightKg: data.weightKg, reps: data.reps, orderIndex: data.orderIndex },
+        ],
+      }));
+    },
+  );
 };

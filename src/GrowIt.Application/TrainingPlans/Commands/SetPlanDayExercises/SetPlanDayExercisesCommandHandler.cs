@@ -82,20 +82,23 @@ public class SetPlanDayExercisesCommandHandler(IApplicationDbContext dbContext)
 
             var selection = request.Selections[index];
 
-            if (idsToCreateWith[index] is null)
-            {
-                var reusable = originalRows.FirstOrDefault(e =>
-                    !claimed.Contains(e.Id)
-                    && (selection.ExerciseId.HasValue
-                        ? e.ExerciseId == selection.ExerciseId
-                        : e.ExerciseId is null && e.CustomExerciseName == selection.CustomExerciseName));
+            // Reuse is tried even when the caller named an id of its own, and that is
+            // deliberate. A second device working from a stale copy of the day will mint a
+            // fresh id for an exercise the day already holds; honouring that id would drop
+            // the existing row and rebuild it on the defaults, losing whatever the user had
+            // tuned. Keeping the row is worth more than keeping the id - and the caller
+            // reconciles on the next read, which resolves by exercise rather than by id.
+            var reusable = originalRows.FirstOrDefault(e =>
+                !claimed.Contains(e.Id)
+                && (selection.ExerciseId.HasValue
+                    ? e.ExerciseId == selection.ExerciseId
+                    : e.ExerciseId is null && e.CustomExerciseName == selection.CustomExerciseName));
 
-                if (reusable is not null)
-                {
-                    claimed.Add(reusable.Id);
-                    resolved[index] = reusable;
-                    continue;
-                }
+            if (reusable is not null)
+            {
+                claimed.Add(reusable.Id);
+                resolved[index] = reusable;
+                continue;
             }
 
             var created = new TrainingPlanDayExercise

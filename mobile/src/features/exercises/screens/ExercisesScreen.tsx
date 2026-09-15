@@ -1,34 +1,19 @@
-import { View, Text, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList } from 'react-native';
 import { useGetApiExercises } from '../../../api/generated/exercises/exercises';
-import { tokens } from '../../../theme/tokens';
+import { ScreenState, screenStateOf } from '../../../theme/components/ScreenState';
 
 export const ExercisesScreen = () => {
-  const { data, isLoading, isError } = useGetApiExercises({
+  const exercisesQuery = useGetApiExercises({
     query: { staleTime: Infinity },
   });
 
-  if (isLoading) {
-    return (
-      <View className="flex-1 bg-bg items-center justify-center">
-        <ActivityIndicator color={tokens.color.lime} />
-      </View>
-    );
-  }
-
-  if (isError) {
-    return (
-      <View className="flex-1 bg-bg items-center justify-center">
-        <Text className="text-muted font-mono-md text-label tracking-label uppercase">
-          [ BŁĄD ŁADOWANIA ]
-        </Text>
-      </View>
-    );
-  }
+  const screenState = screenStateOf(exercisesQuery);
+  if (screenState) return <ScreenState kind={screenState} />;
 
   return (
     <FlatList
       className="bg-bg"
-      data={data}
+      data={exercisesQuery.data}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
         <View className="bg-surface rounded-md p-4 border border-line">

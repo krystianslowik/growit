@@ -1,10 +1,11 @@
-import { View, Text, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { TodayStackParamList } from '../../../navigation/types';
 import { useGetApiWorkoutsWorkoutId } from '../../../api/generated/workouts/workouts';
 import { WorkoutExerciseResponse } from '../../../api/generated/schemas';
+import { SetLogger } from '../components/SetLogger';
 import { Button } from '../../../theme/components/Button';
-import { tokens } from '../../../theme/tokens';
+import { ScreenState, screenStateOf } from '../../../theme/components/ScreenState';
 
 type Props = NativeStackScreenProps<TodayStackParamList, 'WorkoutDetail'>;
 
@@ -31,20 +32,17 @@ const ExerciseCard = ({ item }: { item: WorkoutExerciseResponse }) => (
         ))}
       </View>
     )}
+    <SetLogger exercise={item} />
   </View>
 );
 
 export const WorkoutDetailScreen = ({ route, navigation }: Props) => {
   const { workoutId } = route.params;
-  const { data: workout, isLoading } = useGetApiWorkoutsWorkoutId(workoutId);
+  const workoutQuery = useGetApiWorkoutsWorkoutId(workoutId);
+  const workout = workoutQuery.data;
+  const screenState = screenStateOf(workoutQuery);
 
-  if (isLoading) {
-    return (
-      <View className="flex-1 bg-bg items-center justify-center">
-        <ActivityIndicator color={tokens.color.lime} />
-      </View>
-    );
-  }
+  if (screenState) return <ScreenState kind={screenState} />;
 
   if (!workout) {
     return (

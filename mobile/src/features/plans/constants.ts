@@ -13,7 +13,3 @@ export const isDefaultTargets = (t: {
   t.targetReps === DEFAULT_TARGETS.reps &&
   t.restSeconds === DEFAULT_TARGETS.restSeconds;
 
-/// Rows that exist only in the optimistic cache - the server has not answered with a
-/// real id yet, so they must not be edited or deleted by id.
-export const TEMP_ID_PREFIX = 'temp:';
-export const isPendingExerciseId = (id: string) => id.startsWith(TEMP_ID_PREFIX);

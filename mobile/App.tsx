@@ -2,7 +2,6 @@ import './global.css';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClientProvider } from '@tanstack/react-query';
 import {
   useFonts,
   SpaceGrotesk_400Regular,
@@ -19,9 +18,7 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { AuthProvider } from './src/auth/AuthContext';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import { setupConnectivity } from './src/offline/connectivity';
-import { createQueryClient } from './src/offline/queryClient';
-
-const queryClient = createQueryClient();
+import { QueryLayer } from './src/offline/QueryLayer';
 
 setupConnectivity();
 
@@ -39,14 +36,16 @@ export const App = () => {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
-            <AuthProvider>
+        <ThemeProvider>
+          {/* Auth sits above the query layer, not inside it: the cache is stored per user,
+              so the layer has to be handed a user id rather than discover one. */}
+          <AuthProvider>
+            <QueryLayer>
               <StatusBar style="light" />
               <RootNavigator />
-            </AuthProvider>
-          </ThemeProvider>
-        </QueryClientProvider>
+            </QueryLayer>
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

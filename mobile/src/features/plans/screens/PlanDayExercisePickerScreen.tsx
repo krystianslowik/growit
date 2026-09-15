@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -16,7 +16,8 @@ import {
   PlanDayResponse,
 } from '../../../api/generated/schemas';
 import { usePlanDayExercisesSync } from '../hooks/usePlanDayExercisesSync';
-import { DEFAULT_TARGETS, TEMP_ID_PREFIX, isDefaultTargets } from '../constants';
+import { DEFAULT_TARGETS, isDefaultTargets } from '../constants';
+import { newId } from '../../../offline/ids';
 import { Button } from '../../../theme/components/Button';
 import { Input } from '../../../theme/components/Input';
 import { tokens } from '../../../theme/tokens';
@@ -26,10 +27,13 @@ type Props = NativeStackScreenProps<PlansStackParamList, 'PlanDayExercisePicker'
 
 /// The day's exercises as the user currently wants them, in order. Kept as a list rather
 /// than a set because position is what the server turns into OrderIndex.
+/// A pick the user has just made carries the id its row will get, minted here rather than
+/// waited for. That is what lets the row be edited, reordered and referred to straight
+/// away, with or without a connection.
 type Pick =
   | { kind: 'existing'; row: PlanDayExerciseResponse }
-  | { kind: 'library'; exerciseId: string; name: string; category: string | null }
-  | { kind: 'custom'; name: string };
+  | { kind: 'library'; rowId: string; exerciseId: string; name: string; category: string | null }
+  | { kind: 'custom'; rowId: string; name: string };
 
 type Snapshot = {
   ids: Set<string>;
@@ -40,15 +44,16 @@ type Snapshot = {
 const pickExerciseId = (pick: Pick) =>
   pick.kind === 'existing' ? pick.row.exerciseId : pick.kind === 'library' ? pick.exerciseId : null;
 
-const toSelection = (pick: Pick): PlanDayExerciseSelection => {
-  if (pick.kind === 'existing') {
-    return { planDayExerciseId: pick.row.id, exerciseId: null, customExerciseName: null };
-  }
-  if (pick.kind === 'library') {
-    return { planDayExerciseId: null, exerciseId: pick.exerciseId, customExerciseName: null };
-  }
-  return { planDayExerciseId: null, exerciseId: null, customExerciseName: pick.name };
-};
+/// Built from the resolved rows rather than from the raw picks, and that difference
+/// matters: a pick that turns out to match a row the day already has must be sent as that
+/// row, not as a new one carrying a fresh id. Sending the fresh id would have the server
+/// drop the existing row and rebuild it on default targets, quietly undoing whatever the
+/// user had tuned.
+const toSelection = (row: PlanDayExerciseResponse): PlanDayExerciseSelection => ({
+  planDayExerciseId: row.id,
+  exerciseId: row.exerciseId,
+  customExerciseName: row.exerciseId ? null : row.exerciseName,
+});
 
 /// Renders the picks as day exercises for the optimistic cache. Each pick is resolved
 /// against what the day already holds, so once a write lands and the day refetches, the
@@ -67,7 +72,7 @@ const toDayExercises = (picks: Pick[], day: PlanDayResponse): PlanDayExerciseRes
 
     const isLibrary = pick.kind === 'library';
     return {
-      id: `${TEMP_ID_PREFIX}${isLibrary ? pick.exerciseId : `custom:${pick.name}`}`,
+      id: pick.rowId,
       exerciseId: isLibrary ? pick.exerciseId : null,
       exerciseName: isLibrary ? pick.name : pick.name,
       category: isLibrary ? pick.category : null,
@@ -79,7 +84,7 @@ const toDayExercises = (picks: Pick[], day: PlanDayResponse): PlanDayExerciseRes
   });
 
 export const PlanDayExercisePickerScreen = ({ route, navigation }: Props) => {
-  const { dayId, planId } = route.params;
+  const { dayId } = route.params;
   const queryClient = useQueryClient();
 
   const [query, setQuery] = useState('');
@@ -115,16 +120,16 @@ export const PlanDayExercisePickerScreen = ({ route, navigation }: Props) => {
     seededRef.current = true;
   }, [day]);
 
-  const items = useMemo(() => picks?.map(toSelection) ?? null, [picks]);
+  // The same list that goes into the cache is the list we send, so what the screen shows
+  // and what the server is told can never drift apart.
+  const resolvedRows = useMemo(
+    () => (picks && day ? toDayExercises(picks, day) : null),
+    [picks, day],
+  );
 
-  const handleSyncError = useCallback(() => {
-    Alert.alert(
-      'Nie udało się zapisać',
-      'Zmiany w ćwiczeniach tego dnia nie zostały zapisane. Sprawdź połączenie i spróbuj ponownie.',
-    );
-  }, []);
+  const items = useMemo(() => resolvedRows?.map(toSelection) ?? null, [resolvedRows]);
 
-  const flush = usePlanDayExercisesSync({ dayId, planId, items, onError: handleSyncError });
+  usePlanDayExercisesSync({ dayId, items });
 
   // Show the change on the day view straight away; the write follows in the background.
   useEffect(() => {
@@ -135,11 +140,6 @@ export const PlanDayExercisePickerScreen = ({ route, navigation }: Props) => {
     );
   }, [picks, queryClient, dayId]);
 
-  // Leaving the screen should not wait for the debounce.
-  useEffect(
-    () => navigation.addListener('beforeRemove', () => void flush('beforeRemove')),
-    [navigation, flush],
-  );
 
   const selectedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -160,7 +160,7 @@ export const PlanDayExercisePickerScreen = ({ route, navigation }: Props) => {
       console.log('[picker] toggle ON', item.name);
       setPicks((prev) => [
         ...(prev ?? []),
-        { kind: 'library', exerciseId: id, name: item.name, category: item.category },
+        { kind: 'library', rowId: newId(), exerciseId: id, name: item.name, category: item.category },
       ]);
       return;
     }
@@ -209,7 +209,7 @@ export const PlanDayExercisePickerScreen = ({ route, navigation }: Props) => {
     const name = customName.trim();
     if (!name || customPicks.some((pick) => pick.name === name)) return;
     console.log('[picker] add custom', name);
-    setPicks((prev) => [...(prev ?? []), { kind: 'custom', name }]);
+    setPicks((prev) => [...(prev ?? []), { kind: 'custom', rowId: newId(), name }]);
     setCustomName('');
     setIsCustomOpen(false);
   };

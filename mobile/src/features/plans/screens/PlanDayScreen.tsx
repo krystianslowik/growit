@@ -1,21 +1,22 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { PlansStackParamList } from '../../../navigation/types';
 import { useGetApiTrainingPlansDaysDayId } from '../../../api/generated/training-plans/training-plans';
 import { PlanDayExerciseRow } from '../components/PlanDayExerciseRow';
 import { usePlanDayAutoSave } from '../hooks/usePlanDayAutoSave';
 import { useDeleteApiTrainingPlansExercisesPlanDayExerciseId } from '../../../api/generated/training-plans/training-plans';
-import { isPendingExerciseId } from '../constants';
 import { Input } from '../../../theme/components/Input';
-import { tokens } from '../../../theme/tokens';
+import { ScreenState, screenStateOf } from '../../../theme/components/ScreenState';
 
 type Props = NativeStackScreenProps<PlansStackParamList, 'PlanDay'>;
 
 export const PlanDayScreen = ({ route, navigation }: Props) => {
   const { dayId } = route.params;
 
-  const { data: day, isLoading } = useGetApiTrainingPlansDaysDayId(dayId);
+  const dayQuery = useGetApiTrainingPlansDaysDayId(dayId);
+  const day = dayQuery.data;
+  const screenState = screenStateOf(dayQuery);
   const { mutate: removeExercise } = useDeleteApiTrainingPlansExercisesPlanDayExerciseId();
 
   const [name, setName] = useState('');
@@ -30,13 +31,7 @@ export const PlanDayScreen = ({ route, navigation }: Props) => {
 
   usePlanDayAutoSave({ dayId, day, name, notes });
 
-  if (isLoading) {
-    return (
-      <View className="flex-1 bg-bg items-center justify-center">
-        <ActivityIndicator color={tokens.color.lime} />
-      </View>
-    );
-  }
+  if (screenState) return <ScreenState kind={screenState} />;
 
   return (
     <ScrollView className="flex-1 bg-bg" contentContainerClassName="p-4 gap-5">
@@ -65,7 +60,6 @@ export const PlanDayScreen = ({ route, navigation }: Props) => {
               <PlanDayExerciseRow
                 key={exercise.id}
                 exercise={exercise}
-                pending={isPendingExerciseId(exercise.id)}
                 onDelete={() => removeExercise({ planDayExerciseId: exercise.id })}
               />
             ))}
