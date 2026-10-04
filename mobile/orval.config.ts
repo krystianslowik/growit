@@ -9,6 +9,7 @@ export default defineConfig({
       schemas: 'src/api/generated/schemas',
       client: 'react-query',
       httpClient: 'axios',
+      clean: true,
       override: {
         mutator: {
           path: 'src/api/axios.ts',

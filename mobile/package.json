@@ -52,7 +52,7 @@
   "devDependencies": {
     "@types/node": "^26.6.4",
     "@types/react": "~19.2.18",
-    "orval": "^8.8.1",
+    "orval": "^8.39.0",
     "typescript": "~6.0.3"
   },
   "private": true
