@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using GrowIt.API.Middleware;
 using GrowIt.Application;
 using GrowIt.Infrastructure;
@@ -9,7 +10,14 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+// Strict, so numbers are numbers on the wire and in the OpenAPI document. The web
+// default also accepts numeric strings, which .NET 10 publishes as integer|string and
+// the generated client would type as number | string. MVC and the OpenAPI generator
+// read separate options, so both are set.
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.NumberHandling = JsonNumberHandling.Strict);
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.NumberHandling = JsonNumberHandling.Strict);
 builder.Services.AddOpenApi();
 
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
