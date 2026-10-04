@@ -48,8 +48,6 @@ public class GrowItDbContext(DbContextOptions<GrowItDbContext> options) : DbCont
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(GrowItDbContext).Assembly);
-
         var seededAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         modelBuilder.Entity<Exercise>().HasData(
