@@ -27,7 +27,7 @@ public class SetPlanDayExercisesTests : IAsyncLifetime
     private static GrowItDbContext NewContext() =>
         new(new DbContextOptionsBuilder<GrowItDbContext>().UseNpgsql(ConnectionString).Options);
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await using var db = NewContext();
 
@@ -71,7 +71,7 @@ public class SetPlanDayExercisesTests : IAsyncLifetime
         await db.SaveChangesAsync();
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         await using var db = NewContext();
         var plans = await db.TrainingPlans

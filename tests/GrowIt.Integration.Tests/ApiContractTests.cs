@@ -25,9 +25,9 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
     private static GrowItDbContext NewContext() =>
         new(new DbContextOptionsBuilder<GrowItDbContext>().UseNpgsql(ConnectionString).Options);
 
-    public Task InitializeAsync() => Task.CompletedTask;
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         await using var db = NewContext();
 
