@@ -51,12 +51,12 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
         // every other user was refused for good.
         var response = await Mine().PostAsJsonAsync(
             "/api/training-plans",
-            new { name = "Plan bez id", notes = (string?)null });
+            new { name = "Plan bez id", notes = (string?)null }, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
         await using var db = NewContext();
-        Assert.False(await db.TrainingPlans.AnyAsync(p => p.Id == Guid.Empty));
+        Assert.False(await db.TrainingPlans.AnyAsync(p => p.Id == Guid.Empty, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -65,32 +65,32 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
         var id = Guid.CreateVersion7();
         var body = new { id, name = "Push/Pull", notes = (string?)null };
 
-        var first = await Mine().PostAsJsonAsync("/api/training-plans", body);
-        var second = await Mine().PostAsJsonAsync("/api/training-plans", body);
+        var first = await Mine().PostAsJsonAsync("/api/training-plans", body, TestContext.Current.CancellationToken);
+        var second = await Mine().PostAsJsonAsync("/api/training-plans", body, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
         await using var db = NewContext();
-        Assert.Equal(1, await db.TrainingPlans.CountAsync(p => p.Id == id));
+        Assert.Equal(1, await db.TrainingPlans.CountAsync(p => p.Id == id, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task An_id_another_user_already_holds_comes_back_as_a_conflict()
     {
         var id = Guid.CreateVersion7();
-        await Theirs().PostAsJsonAsync("/api/training-plans", new { id, name = "Ich plan", notes = (string?)null });
+        await Theirs().PostAsJsonAsync("/api/training-plans", new { id, name = "Ich plan", notes = (string?)null }, TestContext.Current.CancellationToken);
 
         var response = await Mine().PostAsJsonAsync(
             "/api/training-plans",
-            new { id, name = "Mój plan", notes = (string?)null });
+            new { id, name = "Mój plan", notes = (string?)null }, TestContext.Current.CancellationToken);
 
         // 409 and not 500: the client has to know this will never work, so the write is
         // dropped rather than retried until its budget runs out.
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
 
         await using var db = NewContext();
-        var stored = await db.TrainingPlans.FirstAsync(p => p.Id == id);
+        var stored = await db.TrainingPlans.FirstAsync(p => p.Id == id, TestContext.Current.CancellationToken);
         Assert.Equal(_strangerId, stored.UserId);
     }
 
@@ -109,7 +109,7 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
                 new { planDayExerciseId = planDayId, workoutExerciseId = Guid.CreateVersion7() },
                 new { planDayExerciseId = planDayId, workoutExerciseId = Guid.CreateVersion7() },
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Used to reach ToDictionary and throw, which surfaced as 500 - a permanent
         // failure the queue would have retried without end.
@@ -126,7 +126,7 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
             name = "Trening",
             performedAt = DateOnly.FromDateTime(DateTime.UtcNow),
             notes = (string?)null,
-        });
+        }, TestContext.Current.CancellationToken);
 
         var response = await Mine().PostAsJsonAsync($"/api/Workouts/{workoutId}/exercises", new
         {
@@ -137,7 +137,7 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
             targetSets = (int?)null,
             targetReps = (int?)null,
             restSeconds = (int?)null,
-        });
+        }, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -152,7 +152,7 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
             name = "Trening",
             performedAt = DateOnly.FromDateTime(DateTime.UtcNow),
             notes = (string?)null,
-        });
+        }, TestContext.Current.CancellationToken);
 
         var response = await Mine().PostAsJsonAsync($"/api/Workouts/{workoutId}/exercises", new
         {
@@ -162,13 +162,13 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
             targetSets = (int?)null,
             targetReps = (int?)null,
             restSeconds = (int?)null,
-        });
+        }, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
         // The position is the client's to decide now; the server used to pin every row to 0.
         await using var db = NewContext();
-        var stored = await db.WorkoutExercises.FirstAsync(e => e.WorkoutId == workoutId);
+        var stored = await db.WorkoutExercises.FirstAsync(e => e.WorkoutId == workoutId, TestContext.Current.CancellationToken);
         Assert.Equal(2, stored.OrderIndex);
     }
 
@@ -177,7 +177,7 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
     {
         // Skip((page - 1) * pageSize) turned this into a negative OFFSET, which Postgres
         // rejects outright - a 500 reachable from a query string.
-        var response = await Mine().GetAsync($"/api/Workouts/{_userId}/history?page=0");
+        var response = await Mine().GetAsync($"/api/Workouts/{_userId}/history?page=0", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -192,7 +192,7 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
             name = "Ich trening",
             performedAt = DateOnly.FromDateTime(DateTime.UtcNow),
             notes = (string?)null,
-        });
+        }, TestContext.Current.CancellationToken);
 
         var exerciseId = Guid.CreateVersion7();
         await Theirs().PostAsJsonAsync($"/api/Workouts/{workoutId}/exercises", new
@@ -203,7 +203,7 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
             targetSets = (int?)null,
             targetReps = (int?)null,
             restSeconds = (int?)null,
-        });
+        }, TestContext.Current.CancellationToken);
 
         var response = await Mine().PostAsJsonAsync($"/api/Exercises/{exerciseId}/sets", new
         {
@@ -211,13 +211,13 @@ public class ApiContractTests(ApiFactory factory) : IClassFixture<ApiFactory>, I
             weightKg = 100m,
             reps = 5,
             orderIndex = 0,
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Missing and not-yours answer alike on purpose: confirming that someone else's
         // id exists would leak it.
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
 
         await using var db = NewContext();
-        Assert.False(await db.Sets.AnyAsync(s => s.WorkoutExerciseId == exerciseId));
+        Assert.False(await db.Sets.AnyAsync(s => s.WorkoutExerciseId == exerciseId, TestContext.Current.CancellationToken));
     }
 }

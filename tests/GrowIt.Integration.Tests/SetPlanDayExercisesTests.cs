@@ -118,7 +118,7 @@ public class SetPlanDayExercisesTests : IAsyncLifetime
             }
         });
 
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return rowId;
     }
 
@@ -128,7 +128,7 @@ public class SetPlanDayExercisesTests : IAsyncLifetime
         return await db.TrainingPlanDayExercises
             .Where(e => e.PlanDayId == _dayId)
             .OrderBy(e => e.OrderIndex)
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
     }
 
     private async Task RunAsync(params PlanDayExerciseSelectionInput[] selections)
@@ -136,7 +136,7 @@ public class SetPlanDayExercisesTests : IAsyncLifetime
         await using var db = NewContext();
         var handler = new SetPlanDayExercisesCommandHandler(db);
         await handler.Handle(
-            new SetPlanDayExercisesCommand(_userId, _dayId, selections), CancellationToken.None);
+            new SetPlanDayExercisesCommand(_userId, _dayId, selections), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public class SetPlanDayExercisesTests : IAsyncLifetime
 
         // And the row it pointed at is untouched.
         await using var db = NewContext();
-        var stranger = await db.TrainingPlanDayExercises.FirstAsync(e => e.Id == strangerRowId);
+        var stranger = await db.TrainingPlanDayExercises.FirstAsync(e => e.Id == strangerRowId, TestContext.Current.CancellationToken);
         Assert.NotEqual(_dayId, stranger.PlanDayId);
     }
 }

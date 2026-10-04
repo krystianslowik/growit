@@ -49,7 +49,7 @@ public class IdempotentCreateTests : IAsyncLifetime
         await using var db = NewContext();
         var handler = new CreateTrainingPlanCommandHandler(db);
         return await handler.Handle(
-            new CreateTrainingPlanCommand(id, ownerId, "Plan", null), CancellationToken.None);
+            new CreateTrainingPlanCommand(id, ownerId, "Plan", null), TestContext.Current.CancellationToken);
     }
 
     /// A session with one exercise on it, owned by whoever is named.
@@ -90,7 +90,7 @@ public class IdempotentCreateTests : IAsyncLifetime
         Assert.Equal(planId, second);
 
         await using var db = NewContext();
-        Assert.Equal(1, await db.TrainingPlans.CountAsync(p => p.Id == planId));
+        Assert.Equal(1, await db.TrainingPlans.CountAsync(p => p.Id == planId, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -101,9 +101,9 @@ public class IdempotentCreateTests : IAsyncLifetime
 
         await using (var db = NewContext())
         {
-            var plan = await db.TrainingPlans.FirstAsync(p => p.Id == planId);
+            var plan = await db.TrainingPlans.FirstAsync(p => p.Id == planId, TestContext.Current.CancellationToken);
             plan.Name = "Renamed since";
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         // The retry carries the original payload. Applying it would silently undo an
@@ -111,7 +111,7 @@ public class IdempotentCreateTests : IAsyncLifetime
         await CreatePlanAsync(planId, _userId);
 
         await using var check = NewContext();
-        var stored = await check.TrainingPlans.FirstAsync(p => p.Id == planId);
+        var stored = await check.TrainingPlans.FirstAsync(p => p.Id == planId, TestContext.Current.CancellationToken);
         Assert.Equal("Renamed since", stored.Name);
     }
 
@@ -125,7 +125,7 @@ public class IdempotentCreateTests : IAsyncLifetime
 
         // The stranger keeps their plan.
         await using var db = NewContext();
-        var stored = await db.TrainingPlans.FirstAsync(p => p.Id == planId);
+        var stored = await db.TrainingPlans.FirstAsync(p => p.Id == planId, TestContext.Current.CancellationToken);
         Assert.Equal(_strangerId, stored.UserId);
     }
 
@@ -139,17 +139,17 @@ public class IdempotentCreateTests : IAsyncLifetime
 
         await using (var db = NewContext())
         {
-            await new LogSetCommandHandler(db).Handle(command, CancellationToken.None);
+            await new LogSetCommandHandler(db).Handle(command, TestContext.Current.CancellationToken);
         }
 
         // Logged in a basement with no signal: the write is retried when signal returns.
         await using (var db = NewContext())
         {
-            await new LogSetCommandHandler(db).Handle(command, CancellationToken.None);
+            await new LogSetCommandHandler(db).Handle(command, TestContext.Current.CancellationToken);
         }
 
         await using var check = NewContext();
-        Assert.Equal(1, await check.Sets.CountAsync(s => s.Id == setId));
+        Assert.Equal(1, await check.Sets.CountAsync(s => s.Id == setId, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class IdempotentCreateTests : IAsyncLifetime
             var handler = new LogSetCommandHandler(db);
             await handler.Handle(
                 new LogSetCommand(Guid.CreateVersion7(), _userId, workoutExerciseId, 100m, 5, 0),
-                CancellationToken.None);
+                TestContext.Current.CancellationToken);
         }
 
         await using (var db = NewContext())
@@ -170,14 +170,14 @@ public class IdempotentCreateTests : IAsyncLifetime
             var handler = new LogSetCommandHandler(db);
             await handler.Handle(
                 new LogSetCommand(Guid.CreateVersion7(), _userId, workoutExerciseId, 105m, 3, 1),
-                CancellationToken.None);
+                TestContext.Current.CancellationToken);
         }
 
         await using var check = NewContext();
         var sets = await check.Sets
             .Where(s => s.WorkoutExerciseId == workoutExerciseId)
             .OrderBy(s => s.OrderIndex)
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // OrderIndex used to be hardcoded to 0, which left every set claiming to be first.
         Assert.Equal(new[] { 0, 1 }, sets.Select(s => s.OrderIndex));
@@ -194,10 +194,10 @@ public class IdempotentCreateTests : IAsyncLifetime
 
         await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
             new LogSetCommand(Guid.CreateVersion7(), _userId, strangersExerciseId, 100m, 5, 0),
-            CancellationToken.None));
+            TestContext.Current.CancellationToken));
 
         await using var check = NewContext();
-        Assert.Equal(0, await check.Sets.CountAsync(s => s.WorkoutExerciseId == strangersExerciseId));
+        Assert.Equal(0, await check.Sets.CountAsync(s => s.WorkoutExerciseId == strangersExerciseId, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -209,13 +209,13 @@ public class IdempotentCreateTests : IAsyncLifetime
         var strangersWorkoutId = await db.WorkoutExercises
             .Where(e => e.Id == strangersExerciseId)
             .Select(e => e.WorkoutId)
-            .FirstAsync();
+            .FirstAsync(TestContext.Current.CancellationToken);
 
         var handler = new AddExerciseToWorkoutHandler(db);
 
         await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
             new AddExerciseToWorkoutCommand(
                 Guid.CreateVersion7(), _userId, strangersWorkoutId, BenchPress, 1, null, null, null),
-            CancellationToken.None));
+            TestContext.Current.CancellationToken));
     }
 }
